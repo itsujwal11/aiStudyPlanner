@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: aasa-postgres
+    environment:
+      POSTGRES_DB: aasa_db
+      POSTGRES_USER: aasa_user
+      POSTGRES_PASSWORD: aasa_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docs/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - aasa-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aasa_user -d aasa_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      platform: linux/amd64
+    container_name: aasa-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aasa_db
+      SPRING_DATASOURCE_USERNAME: aasa_user
+      SPRING_DATASOURCE_PASSWORD: aasa_password
+      GEMINI_API_KEY: AIzaSyBoTUTgUHqLswCYzIVGe88yWLnRSpcPxF4
+      GEMINI_MODEL_NAME: gemini-1.5-flash
+      JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - aasa-network
+    volumes:
+      - ./backend/uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aasa-frontend
+    environment:
+      VITE_API_URL: http://localhost:8080/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - aasa-network
+
+volumes:
+  postgres_data:
+
+networks:
+  aasa-network:
+    driver: bridge
