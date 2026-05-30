@@ -9,5 +9,6 @@ import java.util.List;
 public interface QuizRepository extends JpaRepository<Quiz, Long> {
     List<Quiz> findByTopicId(Long topicId);
     long countByTopicId(Long topicId);
+    long countByTopicIdIn(List<Long> topicIds);
     void deleteByTopicId(Long topicId);
 }

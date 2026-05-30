@@ -25,6 +25,22 @@ public class DashboardController {
     @Autowired
     private AuthService authService;
 
+    @GetMapping("/pdf/{pdfId}")
+    public ResponseEntity<DashboardDto> getPdfDashboard(@PathVariable Long pdfId, Authentication authentication) {
+        try {
+            if (authentication == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            User user = authService.getUserByEmail(authentication.getName());
+            DashboardDto dashboard = dashboardService.generatePdfDashboard(user, pdfId);
+            return ResponseEntity.ok(dashboard);
+        } catch (Exception e) {
+            logger.severe("Error generating PDF dashboard: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @GetMapping
     public ResponseEntity<DashboardDto> getDashboard(Authentication authentication) {
         try {

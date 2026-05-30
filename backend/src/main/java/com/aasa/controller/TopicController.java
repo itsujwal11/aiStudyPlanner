@@ -96,6 +96,17 @@ private OllamaAiService ollamaAiService;
         }
     }
 
+    @GetMapping("/ranked/pdf/{pdfId}")
+    public ResponseEntity<List<TopicDto>> getRankedTopicsByPdf(@PathVariable Long pdfId, Authentication authentication) {
+        try {
+            List<TopicDto> topics = topicAnalysisService.getTopicsByPdf(pdfId);
+            return ResponseEntity.ok(topics);
+        } catch (Exception e) {
+            logger.severe("Error fetching ranked topics: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @GetMapping("/ranked")
     public ResponseEntity<List<TopicDto>> getRankedTopics(Authentication authentication) {
         try {

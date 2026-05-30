@@ -1,4 +1,3 @@
--- Fix column sizes in QUIZ_ATTEMPTS table
-ALTER TABLE QUIZ_ATTEMPTS MODIFY (SELECTED_ANSWER VARCHAR2(500));
+-- Fix column sizes in quiz_attempts table
+ALTER TABLE quiz_attempts ALTER COLUMN selected_answer TYPE VARCHAR(500);
 COMMIT;
-EXIT;

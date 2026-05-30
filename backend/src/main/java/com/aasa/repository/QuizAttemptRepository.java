@@ -15,6 +15,9 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     @Query("SELECT AVG(CASE WHEN qa.isCorrect = true THEN 100.0 ELSE 0.0 END) FROM QuizAttempt qa WHERE qa.user.id = ?1")
     Double getAverageScore(Long userId);
 
+    @Query("SELECT AVG(CASE WHEN qa.isCorrect = true THEN 100.0 ELSE 0.0 END) FROM QuizAttempt qa WHERE qa.user.id = ?1 AND qa.quiz.topic.pdfDocument.id = ?2")
+    Double getAverageScoreByPdf(Long userId, Long pdfId);
+
     @Query("SELECT COUNT(DISTINCT qa.quiz.topic.id) FROM QuizAttempt qa WHERE qa.user.id = ?1 AND qa.isCorrect = true")
     Integer countCorrectTopics(Long userId);
 

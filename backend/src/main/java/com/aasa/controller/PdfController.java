@@ -118,6 +118,17 @@ public class PdfController {
         }
     }
 
+    @GetMapping("/{pdfId}/detail")
+    public ResponseEntity<?> getPdfDetail(@PathVariable Long pdfId, Authentication authentication) {
+        try {
+            User user = authService.getUserByEmail(authentication.getName());
+            return ResponseEntity.ok(pdfManagementService.getPdfDetail(pdfId, user.getId()));
+        } catch (Exception e) {
+            logger.severe("Error fetching PDF detail: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+
     @DeleteMapping("/{pdfId}")
     public ResponseEntity<Void> deletePdf(@PathVariable Long pdfId) {
         try {

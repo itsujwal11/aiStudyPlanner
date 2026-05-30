@@ -2,6 +2,7 @@ package com.aasa.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "study_progress")
@@ -38,6 +39,30 @@ public class StudyProgress {
 
     @Column(name = "correct_attempts")
     private Integer correctAttempts = 0;
+
+    @Column(name = "mastery_level")
+    private Double masteryLevel = 0.0;
+
+    @Column(name = "alpha_param")
+    private Double alpha = 2.0;
+
+    @Column(name = "beta_param")
+    private Double beta = 8.0;
+
+    @Column(name = "sm2_interval")
+    private Integer sm2Interval = 0;
+
+    @Column(name = "sm2_efactor")
+    private Double sm2Efactor = 2.5;
+
+    @Column(name = "sm2_repetitions")
+    private Integer sm2Repetitions = 0;
+
+    @Column(name = "next_review_date")
+    private LocalDate nextReviewDate;
+
+    @Column(name = "last_study_date")
+    private LocalDate lastStudyDate;
 
     public enum WeaknessLevel {
         LOW, MEDIUM, HIGH, NOT_ATTEMPTED
