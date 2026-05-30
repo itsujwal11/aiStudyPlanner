@@ -51,9 +51,6 @@ public class PdfManagementService {
         String fileName = file.getOriginalFilename();
         logger.info("Uploading PDF: " + fileName + " for user: " + user.getId());
 
-        // First, clean up all previous user data to enforce one-session-per-PDF
-        deleteAllUserData(user);
-
         String uniqueFileName = UUID.randomUUID() + "_" + fileName;
         String filePath = uploadDir + "/" + uniqueFileName;
 
@@ -110,6 +107,7 @@ public class PdfManagementService {
         logger.info("Deleted all PDFs for user: " + userId);
     }
 
+    @Transactional(readOnly = true)
     public List<PdfDocumentDto> getUserPdfs(Long userId) {
         return pdfDocumentRepository.findByUserIdOrderByUploadDateDesc(userId)
                 .stream()
@@ -120,6 +118,69 @@ public class PdfManagementService {
     public PdfDocument getPdfById(Long pdfId) {
         return pdfDocumentRepository.findById(pdfId)
                 .orElseThrow(() -> new RuntimeException("PDF not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public com.aasa.dto.PdfDetailDto getPdfDetail(Long pdfId, Long userId) {
+        PdfDocument pdf = pdfDocumentRepository.findById(pdfId)
+                .orElseThrow(() -> new RuntimeException("PDF not found"));
+
+        List<Topic> pdfTopics = topicRepository.findByPdfDocumentId(pdfId);
+        int totalTopics = pdfTopics.size();
+        long totalQuizzes = quizRepository.countByTopicIdIn(
+                pdfTopics.stream().map(Topic::getId).collect(java.util.stream.Collectors.toList())
+        );
+
+        Double averageScore = quizAttemptRepository.getAverageScoreByPdf(userId, pdfId);
+        if (averageScore == null) averageScore = 0.0;
+
+        Double overallCompletion = studyProgressRepository.getAverageCompletionByPdf(userId, pdfId);
+        if (overallCompletion == null) overallCompletion = 0.0;
+
+        int daysUntilExam = pdf.getExamDate() != null
+                ? (int) java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), pdf.getExamDate())
+                : 0;
+
+        java.util.Map<Long, com.aasa.entity.StudyProgress> progressMap = studyProgressRepository
+                .findByUserIdAndPdfId(userId, pdfId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(sp -> sp.getTopic().getId(), sp -> sp));
+
+        List<com.aasa.dto.PdfDetailDto.TopicDetail> topicDetails = pdfTopics.stream()
+                .map(t -> {
+                    com.aasa.entity.StudyProgress sp = progressMap.get(t.getId());
+                    int qCount = t.getQuizzes() != null ? t.getQuizzes().size() : 0;
+                    return com.aasa.dto.PdfDetailDto.TopicDetail.builder()
+                            .id(t.getId())
+                            .title(t.getTitle())
+                            .description(t.getDescription())
+                            .complexityScore(t.getComplexityScore())
+                            .importanceScore(t.getImportanceScore())
+                            .priorityScore(t.getPriorityScore())
+                            .weaknessScore(t.getWeaknessScore())
+                            .quizCount(qCount)
+                            .totalAttempts(sp != null ? sp.getTotalAttempts() : 0)
+                            .correctAttempts(sp != null ? sp.getCorrectAttempts() : 0)
+                            .bestScore(sp != null ? sp.getBestScore() : 0.0)
+                            .completionPercentage(sp != null ? sp.getCompletionPercentage() : 0.0)
+                            .weaknessLevel(sp != null ? sp.getWeaknessLevel().toString() : "NOT_ATTEMPTED")
+                            .build();
+                })
+                .collect(java.util.stream.Collectors.toList());
+
+        return com.aasa.dto.PdfDetailDto.builder()
+                .id(pdf.getId())
+                .fileName(pdf.getFileName())
+                .uploadDate(pdf.getUploadDate())
+                .examDate(pdf.getExamDate())
+                .isAnalyzed(pdf.getIsAnalyzed())
+                .daysUntilExam(daysUntilExam)
+                .totalTopics(totalTopics)
+                .totalQuizzes((int) totalQuizzes)
+                .averageScore(averageScore)
+                .overallCompletionPercentage(overallCompletion)
+                .topics(topicDetails)
+                .build();
     }
 
     @Transactional

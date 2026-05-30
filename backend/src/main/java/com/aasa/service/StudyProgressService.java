@@ -42,6 +42,9 @@ public class StudyProgressService {
     @Autowired
     private ScoringEngineService scoringEngineService;
 
+    @Autowired
+    private MasteryService masteryService;
+
     public StudyProgress getOrCreateProgress(User user, Topic topic) {
         logger.info("Getting or creating progress for user " + user.getId() + " and topic " + topic.getId());
 
@@ -83,7 +86,15 @@ public class StudyProgressService {
         StudyProgress.WeaknessLevel weaknessLevel = weaknessEngineService.calculateWeaknessLevel(score);
         progress.setWeaknessLevel(weaknessLevel);
 
-        logger.info("Updated progress - Score: " + score + ", Weakness: " + weaknessLevel);
+        MasteryService.SpacedRepetitionResult sr = masteryService.updateAfterAttempt(
+                user, topic, progress,
+                attempt.getIsCorrect(),
+                attempt.getTimeTakenSeconds() != null ? attempt.getTimeTakenSeconds().intValue() : 0
+        );
+
+        logger.info("Updated progress - Score: " + score + ", Weakness: " + weaknessLevel
+                + ", Mastery: " + String.format("%.4f", sr.mastery)
+                + ", Next review: " + progress.getNextReviewDate());
 
         studyProgressRepository.save(progress);
 
@@ -159,6 +170,9 @@ public class StudyProgressService {
                 .totalAttempts(progress.getTotalAttempts())
                 .correctAttempts(progress.getCorrectAttempts())
                 .priorityScore(progress.getTopic().getPriorityScore())
+                .masteryLevel(progress.getMasteryLevel())
+                .sm2Interval(progress.getSm2Interval())
+                .nextReviewDate(progress.getNextReviewDate())
                 .build();
     }
 }

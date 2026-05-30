@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Clock, Play, Pause, RotateCcw, AlertCircle } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Clock, Play, Pause, RotateCcw, Target } from 'lucide-react'
 
 export const StudyTimer = ({ onSessionEnd }) => {
   const [seconds, setSeconds] = useState(0)
@@ -10,131 +11,128 @@ export const StudyTimer = ({ onSessionEnd }) => {
   useEffect(() => {
     let interval
     if (isRunning) {
-      interval = setInterval(() => {
-        setSeconds(prev => prev + 1)
-      }, 1000)
+      interval = setInterval(() => { setSeconds(s => s + 1) }, 1000)
     }
     return () => clearInterval(interval)
   }, [isRunning])
 
-  const formatTime = (totalSeconds) => {
-    const hours = Math.floor(totalSeconds / 3600)
-    const minutes = Math.floor((totalSeconds % 3600) / 60)
-    const secs = totalSeconds % 60
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`
+  const formatTime = (s) => {
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    return `${m}:${String(sec).padStart(2, '0')}`
   }
 
-  const handleReset = () => {
-    setSeconds(0)
-    setIsRunning(false)
-  }
-
+  const handleReset = () => { setSeconds(0); setIsRunning(false) }
   const handleEndSession = () => {
     setIsRunning(false)
-    if (onSessionEnd) {
-      onSessionEnd(seconds)
-    }
+    if (onSessionEnd) onSessionEnd(seconds)
     handleReset()
   }
 
-  const goalSeconds = sessionGoal * 60
-  const progress = Math.min((seconds / goalSeconds) * 100, 100)
-  const isGoalReached = seconds >= goalSeconds
+  const goalSec = sessionGoal * 60
+  const progress = Math.min((seconds / goalSec) * 100, 100)
+  const reached = seconds >= goalSec
 
   return (
-    <div className="card">
-      <div className="flex items-center gap-2 mb-6">
-        <Clock className="w-6 h-6 text-cyan-400" />
-        <h2 className="text-2xl font-bold text-slate-200">Study Timer</h2>
+    <div className="glass-pane rounded-xl p-5 border border-black/8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary" />
+          <h3 className="font-semibold text-sm text-on-surface">Study Timer</h3>
+        </div>
+        {isRunning && (
+          <span className="text-xs text-emerald-600 bg-emerald-100/60 px-2 py-0.5 rounded-full font-medium">
+            Active
+          </span>
+        )}
       </div>
 
-      <div className="bg-slate-800/50 rounded-lg p-8 mb-6 text-center">
-        <div className="text-6xl font-bold text-cyan-400 font-mono mb-4">
+      {/* Timer Display */}
+      <div className="text-center mb-4">
+        <motion.div
+          className="text-4xl font-bold text-primary font-mono tracking-tight"
+          key={seconds}
+          initial={{ scale: 1.05 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.12 }}
+        >
           {formatTime(seconds)}
-        </div>
-
-        <div className="mb-6">
-          <div className="w-full bg-slate-700 rounded-full h-3">
-            <div
-              className={`h-3 rounded-full transition-all ${
-                isGoalReached
-                  ? 'bg-gradient-to-r from-emerald-500 to-green-500'
-                  : 'bg-gradient-to-r from-cyan-500 to-blue-500'
-              }`}
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-          <p className="text-sm text-slate-400 mt-2">
-            Goal: {sessionGoal} minutes {isGoalReached && '✓ Reached!'}
-          </p>
-        </div>
-
-        <div className="flex gap-3 justify-center">
-          <button
-            onClick={() => setIsRunning(!isRunning)}
-            className={`flex items-center gap-2 px-6 py-2 rounded-lg font-semibold transition ${
-              isRunning
-                ? 'bg-orange-500/20 text-orange-400 hover:bg-orange-500/30'
-                : 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
-            }`}
-          >
-            {isRunning ? (
-              <>
-                <Pause className="w-4 h-4" />
-                Pause
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4" />
-                Start
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={handleReset}
-            className="flex items-center gap-2 px-6 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 transition font-semibold"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset
-          </button>
-
-          <button
-            onClick={handleEndSession}
-            className="flex items-center gap-2 px-6 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition font-semibold"
-          >
-            End Session
-          </button>
-        </div>
+        </motion.div>
+        <p className="text-xs text-on-surface-variant/60 mt-1">
+          Goal: {sessionGoal} min {reached && '✓'}
+        </p>
       </div>
 
-      <div className="border-t border-slate-700 pt-4">
+      {/* Progress Bar */}
+      <div className="w-full h-1.5 rounded-full bg-white/40 mb-4 overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${reached ? 'bg-emerald-500' : 'bg-gradient-to-r from-primary to-primary-container'}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.3 }}
+        />
+      </div>
+
+      {/* Controls */}
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => setIsRunning(!isRunning)}
+          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+            isRunning
+              ? 'bg-orange-100/80 text-orange-700 hover:bg-orange-200/80'
+              : 'bg-primary/10 text-primary hover:bg-primary/20'
+          }`}
+        >
+          {isRunning ? <><Pause className="w-3.5 h-3.5" /> Pause</> : <><Play className="w-3.5 h-3.5" /> Start</>}
+        </button>
+        <button
+          onClick={handleReset}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white/40 text-on-surface-variant hover:bg-white/60 border border-black/8 transition-all"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={handleEndSession}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-red-50/80 text-red-700 hover:bg-red-100/80 transition-all"
+        >
+          End
+        </button>
+      </div>
+
+      {/* Goal Settings */}
+      <div className="mt-3 pt-3 border-t border-white/20">
         <button
           onClick={() => setShowGoalInput(!showGoalInput)}
-          className="text-sm text-cyan-400 hover:text-cyan-300 transition"
+          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-all font-medium"
         >
-          {showGoalInput ? 'Hide' : 'Set'} Study Goal
+          <Target className="w-3.5 h-3.5" />
+          {showGoalInput ? 'Hide goal' : 'Set goal'}
         </button>
-
-        {showGoalInput && (
-          <div className="mt-4 p-4 bg-slate-800/50 rounded-lg">
-            <label className="block text-sm text-slate-300 mb-2">
-              Goal Duration (minutes)
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="180"
-              value={sessionGoal}
-              onChange={(e) => setSessionGoal(Math.max(1, parseInt(e.target.value) || 25))}
-              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:border-cyan-500 focus:outline-none"
-            />
-          </div>
-        )}
+        <AnimatePresence>
+          {showGoalInput && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  value={sessionGoal}
+                  onChange={(e) => setSessionGoal(Math.max(1, parseInt(e.target.value) || 25))}
+                  className="input-glass text-sm py-1.5 px-3 flex-1"
+                />
+                <span className="text-xs text-on-surface-variant/60">min</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

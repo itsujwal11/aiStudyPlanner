@@ -19,10 +19,11 @@ public class CustomUserDetailsService implements UserDetailsService {
         var user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
+        String role = "ROLE_" + (user.getRole() != null ? user.getRole() : "USER");
         return User.builder()
                 .username(user.getEmail())
                 .password(user.getPassword())
-                .authorities("ROLE_USER")
+                .authorities(role)
                 .accountExpired(false)
                 .accountLocked(false)
                 .credentialsExpired(false)

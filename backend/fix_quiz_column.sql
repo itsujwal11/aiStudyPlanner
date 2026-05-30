@@ -1,4 +1,3 @@
--- Fix the CORRECT_ANSWER column size in QUIZZES table
-ALTER TABLE QUIZZES MODIFY (CORRECT_ANSWER VARCHAR2(500));
+-- Fix the correct_answer column size in quizzes table
+ALTER TABLE quizzes ALTER COLUMN correct_answer TYPE VARCHAR(500);
 COMMIT;
-EXIT;
