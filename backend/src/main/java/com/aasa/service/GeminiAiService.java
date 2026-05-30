@@ -29,7 +29,7 @@ public class GeminiAiService {
 
 
 
-    private static final int TIMEOUT_SECONDS = 90;
+    private static final int TIMEOUT_SECONDS = 300;
     private static final int MAX_RETRIES     = 3;   // fewer retries needed
     private static final int MAX_TOPICS      = 20;  // cap total topics from one PDF
 

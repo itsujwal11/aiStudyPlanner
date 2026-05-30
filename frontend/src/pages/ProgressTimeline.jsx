@@ -54,8 +54,8 @@ export const ProgressTimeline = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-          <p className="text-slate-400">Loading timeline...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-primary border-t-transparent mx-auto mb-4"></div>
+          <p className="text-on-surface-variant/70">Loading timeline...</p>
         </div>
       </div>
     )
@@ -90,7 +90,7 @@ export const ProgressTimeline = () => {
                   <div key={event.id} className="relative">
                     <div className="absolute -left-7 top-1 w-4 h-4 bg-cyan-500 rounded-full border-4 border-slate-800"></div>
 
-                    <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 hover:border-cyan-500/50 transition">
+                    <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 hover:border-primary/30 transition">
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <p className="text-sm text-slate-400">{event.date}</p>

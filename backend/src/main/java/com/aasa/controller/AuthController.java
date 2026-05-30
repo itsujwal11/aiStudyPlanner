@@ -36,5 +36,16 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Login failed: " + e.getMessage());
         }
     }
+
+    @PostMapping("/seed-admin")
+    public ResponseEntity<?> seedAdmin() {
+        try {
+            AuthResponse response = authService.seedAdmin();
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Seed failed: " + e.getMessage());
+        }
+    }
 }
 

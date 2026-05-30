@@ -21,9 +21,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      window.location.href = '/login'
+      const url = error.config?.url || ''
+      if (!url.includes('/auth/') && !url.includes('/admin/')) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }
@@ -32,6 +35,7 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  seedAdmin: () => api.post('/auth/seed-admin'),
 }
 
 export const pdfAPI = {
@@ -44,6 +48,8 @@ export const pdfAPI = {
     })
   },
   list: () => api.get('/pdfs'),
+  getById: (pdfId) => api.get(`/pdfs/${pdfId}`),
+  getDetail: (pdfId) => api.get(`/pdfs/${pdfId}/detail`),
   delete: (pdfId) => api.delete(`/pdfs/${pdfId}`),
   reset: () => api.delete('/pdfs/reset'),
 }
@@ -64,6 +70,7 @@ export const quizAPI = {
 
 export const dashboardAPI = {
   get: () => api.get('/dashboard'),
+  getByPdf: (pdfId) => api.get(`/dashboard/pdf/${pdfId}`),
 }
 
 export const analyticsAPI = {
@@ -87,8 +94,24 @@ export const studyPlanAPI = {
   generate: (payload) => api.post('/study-plan/generate', payload),
 };
 
+export const flashcardAPI = {
+  getByTopic: (topicId) => api.get(`/flashcards/topic/${topicId}`),
+  getByPdf: (pdfId) => api.get(`/flashcards/pdf/${pdfId}`),
+  review: (flashcardId, rating) => api.post(`/flashcards/${flashcardId}/review`, { rating }),
+  getDue: () => api.get('/flashcards/due'),
+};
+
 export const reportAPI = {
   generateStudyReport: () => api.get('/reports/study-report'),
+};
+
+export const adminAPI = {
+  dashboard: () => api.get('/admin/dashboard'),
+  listEntities: () => api.get('/admin/entities'),
+  listRecords: (entityName, limit = 50, offset = 0) =>
+    api.get(`/admin/entities/${entityName}?limit=${limit}&offset=${offset}`),
+  getRecord: (entityName, id) => api.get(`/admin/entities/${entityName}/${id}`),
+  deleteRecord: (entityName, id) => api.delete(`/admin/entities/${entityName}/${id}`),
 };
 
 export default api;

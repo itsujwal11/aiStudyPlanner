@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Navigation } from '../components/Navigation'
+import { motion } from 'framer-motion'
 import { Settings, Save, AlertCircle } from 'lucide-react'
 
 export const Profile = () => {
@@ -55,33 +55,35 @@ export const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <Navigation currentPage="profile" />
+    <div className="max-w-2xl">
+      <div className="flex items-center gap-3 mb-8">
+        <Settings className="w-8 h-8 text-primary" />
+        <h1 className="text-4xl text-on-surface font-bold">Profile Settings</h1>
+      </div>
 
-      <main className="max-w-2xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-3 mb-8">
-          <Settings className="w-8 h-8 text-cyan-400" />
-          <h1 className="text-4xl font-bold gradient-text">Profile Settings</h1>
+      {error && (
+        <div className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <p>{error}</p>
         </div>
+      )}
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            <p className="text-red-400">{error}</p>
-          </div>
-        )}
+      {success && (
+        <div className="glass-pane rounded-xl p-4 border border-black/8 bg-emerald-50/80 border border-emerald-200/50 text-emerald-700 flex items-center gap-3 mb-6">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <p>{success}</p>
+        </div>
+      )}
 
-        {success && (
-          <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-emerald-500" />
-            <p className="text-emerald-400">{success}</p>
-          </div>
-        )}
-
-        <div className="card">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="glass-pane rounded-xl p-6 border border-black/8"
+        >
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-semibold text-slate-300 mb-2">
+              <label className="block text-sm font-semibold text-on-surface-variant/70 mb-2">
                 Full Name
               </label>
               <input
@@ -90,13 +92,13 @@ export const Profile = () => {
                 value={formData.name}
                 onChange={handleChange}
                 disabled
-                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-300 disabled:opacity-50"
+                className="input-glass px-4 w-full disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <p className="text-xs text-slate-400 mt-1">Contact support to change your name</p>
+              <p className="text-xs text-on-surface-variant/70 mt-1">Contact support to change your name</p>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-300 mb-2">
+              <label className="block text-sm font-semibold text-on-surface-variant/70 mb-2">
                 Email
               </label>
               <input
@@ -105,13 +107,13 @@ export const Profile = () => {
                 value={formData.email}
                 onChange={handleChange}
                 disabled
-                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-300 disabled:opacity-50"
+                className="input-glass px-4 w-full disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <p className="text-xs text-slate-400 mt-1">Contact support to change your email</p>
+              <p className="text-xs text-on-surface-variant/70 mt-1">Contact support to change your email</p>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-300 mb-2">
+              <label className="block text-sm font-semibold text-on-surface-variant/70 mb-2">
                 Exam Date
               </label>
               <input
@@ -119,31 +121,30 @@ export const Profile = () => {
                 name="examDate"
                 value={formData.examDate}
                 onChange={handleChange}
-                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-300 focus:border-cyan-500 focus:outline-none transition"
+                className="input-glass px-4 w-full"
               />
-              <p className="text-xs text-slate-400 mt-1">Update your exam date to get accurate recommendations</p>
+              <p className="text-xs text-on-surface-variant/70 mt-1">Update your exam date to get accurate recommendations</p>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full btn-glass-primary flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
               {loading ? 'Saving...' : 'Save Changes'}
             </button>
           </form>
-        </div>
+        </motion.div>
 
-        <div className="mt-8 card border border-slate-700/50">
-          <h2 className="text-xl font-bold mb-4 text-slate-200">Account Information</h2>
-          <div className="space-y-3 text-sm text-slate-400">
+        <div className="mt-8 glass-pane rounded-xl p-6 border border-black/8">
+          <h2 className="text-xl text-on-surface font-bold mb-4">Account Information</h2>
+          <div className="space-y-3 text-sm text-on-surface-variant/70">
             <p>Member since: {new Date(user?.createdAt || Date.now()).toLocaleDateString()}</p>
-            <p>Account Status: <span className="text-emerald-400">Active</span></p>
-            <p>Study Sessions: <span className="text-cyan-400">Track your progress in Analytics</span></p>
+            <p>Account Status: <span className="text-emerald-600">Active</span></p>
+            <p>Study Sessions: <span className="text-primary">Track your progress in Analytics</span></p>
           </div>
         </div>
-      </main>
     </div>
   )
 }

@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pdfAPI, topicAPI } from '../api'
-import { Upload, AlertCircle, CheckCircle, Loader, RotateCcw } from 'lucide-react'
-import { Navigation } from '../components/Navigation'
+import { motion } from 'framer-motion'
+import toast from 'react-hot-toast'
+import { Upload, AlertCircle, CheckCircle, Loader } from 'lucide-react'
 
 export const UploadPdf = () => {
   const [file, setFile] = useState(null)
@@ -11,10 +12,7 @@ export const UploadPdf = () => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
-  const [progress, setProgress] = useState({
-    stage: '',
-    percentage: 0
-  })
+  const [progress, setProgress] = useState({ stage: '', percentage: 0 })
   const navigate = useNavigate()
 
   const handleFileChange = (e) => {
@@ -56,17 +54,18 @@ export const UploadPdf = () => {
       await new Promise(resolve => setTimeout(resolve, 500))
 
       setProgress({ stage: 'Finalizing study plan...', percentage: 95 })
-      setSuccess('PDF analyzed successfully! Redirecting to planner...')
+      setSuccess('PDF analyzed successfully!')
 
-      // Quizzes are fetched by the Study page, so redirect there (not the Planner page)
+      toast.success('PDF uploaded and analyzed!')
+
       setTimeout(() => {
         setProgress({ stage: '', percentage: 0 })
         navigate('/study')
       }, 1500)
     } catch (err) {
-      // Extract error message from response body (which now contains the actual error)
       const errorMsg = err.response?.data || err.response?.data?.message || err.message || 'Upload failed'
       setError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg))
+      toast.error('Upload failed')
       setProgress({ stage: '', percentage: 0 })
     } finally {
       setLoading(false)
@@ -74,120 +73,81 @@ export const UploadPdf = () => {
     }
   }
 
-  const handleReset = async () => {
-    if (!window.confirm('Start a fresh session? This will delete all current data including PDFs, topics, quizzes, and progress.')) {
-      return
-    }
-    setLoading(true)
-    setError('')
-    try {
-      await pdfAPI.reset()
-      setSuccess('Session reset successfully! Upload a new PDF to start fresh.')
-      setFile(null)
-      setExamDate('')
-    } catch (err) {
-      setError('Failed to reset: ' + (err.response?.data?.message || err.message))
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <Navigation currentPage="upload" />
-      <div className="flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-3xl font-bold gradient-text">Upload Study Material</h1>
-              <button
-                onClick={handleReset}
-                disabled={loading || analyzing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-all disabled:opacity-50"
-                title="Start a new session"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                New Session
-              </button>
-            </div>
-
-            {error && (
-              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-red-500" />
-                <p className="text-red-400 text-sm">{error}</p>
-              </div>
-            )}
-
-            {success && (
-              <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-emerald-500" />
-                <p className="text-emerald-400 text-sm">{success}</p>
-              </div>
-            )}
-
-            {(loading || analyzing) && (
-              <div className="mb-6 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
-                <div className="flex items-center gap-3 mb-3">
-                  <Loader className="w-5 h-5 text-cyan-500 animate-spin" />
-                  <p className="text-cyan-400 font-semibold">{progress.stage}</p>
-                </div>
-                <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${progress.percentage}%` }}
-                  ></div>
-                </div>
-                <p className="text-xs text-slate-400 mt-2">{progress.percentage}% complete</p>
-              </div>
-            )}
-
-            {!loading && !analyzing && (
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-3">PDF File</label>
-                  <label className="flex items-center justify-center w-full px-4 py-8 border-2 border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-cyan-500 transition">
-                    <div className="text-center">
-                      <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                      <p className="text-sm font-medium text-slate-300">
-                        {file ? file.name : 'Click to upload or drag and drop'}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">PDF files only</p>
-                    </div>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      disabled={loading || analyzing}
-                    />
-                  </label>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Exam Date</label>
-                  <input
-                    type="date"
-                    value={examDate}
-                    onChange={(e) => setExamDate(e.target.value)}
-                    className="input-field"
-                    disabled={loading || analyzing}
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading || analyzing || !file || !examDate}
-                  className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload & Analyze
-                </button>
-              </form>
-            )}
+    <div className="flex items-center justify-center px-4 py-12">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="w-full max-w-md"
+      >
+        <div className="glass-pane rounded-xl p-8 border border-black/8">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-on-surface">Upload Study Material</h1>
+            <p className="text-sm text-on-surface-variant/70 mt-1">Upload a PDF to start learning</p>
           </div>
+
+          {error && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 mb-6 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">{error}</p>
+            </motion.div>
+          )}
+
+          {success && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="glass-pane rounded-xl p-4 border border-black/8 bg-emerald-50/80 border border-emerald-200/50 text-emerald-700 mb-6 flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">{success}</p>
+            </motion.div>
+          )}
+
+          {(loading || analyzing) && (
+            <div className="glass-pane-sm rounded-xl p-4 mb-6">
+              <div className="flex items-center gap-3 mb-3">
+                <Loader className="w-5 h-5 text-on-surface animate-spin" />
+                <p className="text-on-surface font-semibold text-sm">{progress.stage}</p>
+              </div>
+              <div className="w-full bg-white/40 rounded-full h-2 overflow-hidden">
+                <motion.div
+                  className="bg-gradient-to-r from-primary to-primary-container h-2 rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress.percentage}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+              <p className="text-xs text-on-surface-variant/70 mt-2">{progress.percentage}% complete</p>
+            </div>
+          )}
+
+          {!loading && !analyzing && (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-on-surface-variant/70 mb-2">PDF File</label>
+                <label className="flex items-center justify-center w-full px-4 py-8 bg-white/40 backdrop-blur-sm border-2 border-dashed border-white/40 rounded-xl cursor-pointer hover:border-primary/40 transition-all">
+                  <div className="text-center">
+                    <Upload className="w-8 h-8 text-on-surface-variant/70 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-on-surface">
+                      {file ? file.name : 'Click to upload or drag and drop'}
+                    </p>
+                    <p className="text-xs text-on-surface-variant/70 mt-1">PDF files only</p>
+                  </div>
+                  <input type="file" accept=".pdf" onChange={handleFileChange} className="hidden" disabled={loading || analyzing} />
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-on-surface-variant/70 mb-2">Exam Date</label>
+                <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} className="input-glass px-4" disabled={loading || analyzing} required />
+              </div>
+
+              <button type="submit" disabled={loading || analyzing || !file || !examDate} className="btn-glass-primary w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <Upload className="w-4 h-4" />
+                Upload & Analyze
+              </button>
+            </form>
+          )}
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }
