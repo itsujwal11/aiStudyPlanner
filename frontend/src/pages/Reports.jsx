@@ -1,7 +1,26 @@
 import React, { useState, useEffect } from 'react'
-import { Navigation } from '../components/Navigation'
+import { motion } from 'framer-motion'
 import { reportAPI } from '../api'
-import { Download, FileText, AlertCircle, CheckCircle } from 'lucide-react'
+import { Download, FileText, AlertCircle } from 'lucide-react'
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4 },
+  },
+}
 
 export const Reports = () => {
   const [report, setReport] = useState(null)
@@ -85,38 +104,39 @@ export const Reports = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-          <p className="text-slate-400">Generating report...</p>
+        <div className="glass-pane rounded-xl p-8 border border-black/8 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-on-surface-variant/70">Generating report...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <Navigation currentPage="reports" />
+    <div className="max-w-5xl">
+      <div className="flex items-center gap-3 mb-8">
+        <FileText className="w-8 h-8 text-primary" />
+        <h1 className="text-4xl text-on-surface font-bold">Study Report</h1>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-3 mb-8">
-          <FileText className="w-8 h-8 text-cyan-400" />
-          <h1 className="text-4xl font-bold gradient-text">Study Report</h1>
+      {error && (
+        <div className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <p>{error}</p>
         </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            <p className="text-red-400">{error}</p>
-          </div>
-        )}
+      )}
 
         {report && (
-          <>
-            <div className="mb-8 flex gap-3">
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <motion.div variants={itemVariants} className="mb-8 flex gap-3">
               <button
                 onClick={exportAsJSON}
                 disabled={exporting}
-                className="flex items-center gap-2 px-6 py-3 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition disabled:opacity-50 font-semibold"
+                className="btn-glass-primary flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 {exporting ? 'Exporting...' : 'Export as JSON'}
@@ -124,92 +144,91 @@ export const Reports = () => {
               <button
                 onClick={exportAsCSV}
                 disabled={exporting}
-                className="flex items-center gap-2 px-6 py-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition disabled:opacity-50 font-semibold"
+                className="btn-glass-secondary flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 {exporting ? 'Exporting...' : 'Export as CSV'}
               </button>
-            </div>
+            </motion.div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="card">
-                <p className="text-slate-400 text-sm">Total Quizzes</p>
-                <p className="text-3xl font-bold text-cyan-400 mt-2">{report.summary.totalQuizzes}</p>
+            <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              <div className="glass-pane rounded-xl p-6 border border-black/8">
+                <p className="text-on-surface-variant/70 text-sm">Total Quizzes</p>
+                <p className="text-3xl font-bold text-primary mt-2">{report.summary.totalQuizzes}</p>
               </div>
-              <div className="card">
-                <p className="text-slate-400 text-sm">Correct Answers</p>
-                <p className="text-3xl font-bold text-emerald-400 mt-2">{report.summary.correctAnswers}</p>
+              <div className="glass-pane rounded-xl p-6 border border-black/8">
+                <p className="text-on-surface-variant/70 text-sm">Correct Answers</p>
+                <p className="text-3xl font-bold text-emerald-600 mt-2">{report.summary.correctAnswers}</p>
               </div>
-              <div className="card">
-                <p className="text-slate-400 text-sm">Overall Accuracy</p>
-                <p className="text-3xl font-bold text-blue-400 mt-2">{report.summary.accuracy}%</p>
+              <div className="glass-pane rounded-xl p-6 border border-black/8">
+                <p className="text-on-surface-variant/70 text-sm">Overall Accuracy</p>
+                <p className="text-3xl font-bold text-blue-600 mt-2">{report.summary.accuracy}%</p>
               </div>
-              <div className="card">
-                <p className="text-slate-400 text-sm">Study Time</p>
-                <p className="text-3xl font-bold text-orange-400 mt-2">{report.summary.totalStudyTimeMinutes}m</p>
+              <div className="glass-pane rounded-xl p-6 border border-black/8">
+                <p className="text-on-surface-variant/70 text-sm">Study Time</p>
+                <p className="text-3xl font-bold text-orange-600 mt-2">{report.summary.totalStudyTimeMinutes}m</p>
               </div>
-            </div>
+            </motion.div>
 
-            <div className="card mb-8">
-              <h2 className="text-2xl font-bold mb-6 text-slate-200">Topic Breakdown</h2>
+            <motion.div variants={itemVariants} className="glass-pane rounded-xl p-6 border border-black/8 mb-8">
+              <h2 className="text-2xl text-on-surface font-bold mb-6">Topic Breakdown</h2>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-slate-700">
-                      <th className="text-left py-3 px-4 text-slate-300">Topic</th>
-                      <th className="text-left py-3 px-4 text-slate-300">Attempts</th>
-                      <th className="text-left py-3 px-4 text-slate-300">Correct</th>
-                      <th className="text-left py-3 px-4 text-slate-300">Accuracy</th>
-                      <th className="text-left py-3 px-4 text-slate-300">Weakness</th>
-                      <th className="text-left py-3 px-4 text-slate-300">Best Score</th>
+                    <tr className="border-b border-black/8">
+                      <th className="text-left py-3 px-4 text-on-surface-variant/70 font-semibold">Topic</th>
+                      <th className="text-left py-3 px-4 text-on-surface-variant/70 font-semibold">Attempts</th>
+                      <th className="text-left py-3 px-4 text-on-surface-variant/70 font-semibold">Correct</th>
+                      <th className="text-left py-3 px-4 text-on-surface-variant/70 font-semibold">Accuracy</th>
+                      <th className="text-left py-3 px-4 text-on-surface-variant/70 font-semibold">Weakness</th>
+                      <th className="text-left py-3 px-4 text-on-surface-variant/70 font-semibold">Best Score</th>
                     </tr>
                   </thead>
                   <tbody>
                     {report.topicBreakdown.map((topic, idx) => (
-                      <tr key={idx} className="border-b border-slate-700/50 hover:bg-slate-800/30">
-                        <td className="py-3 px-4 text-slate-200">{topic.topic}</td>
-                        <td className="py-3 px-4 text-slate-400">{topic.attempts}</td>
-                        <td className="py-3 px-4 text-slate-400">{topic.correct}</td>
+                      <tr key={idx} className="border-b border-black/8 bg-white/40 backdrop-blur-sm">
+                        <td className="py-3 px-4 text-on-surface font-medium">{topic.topic}</td>
+                        <td className="py-3 px-4 text-on-surface-variant/70">{topic.attempts}</td>
+                        <td className="py-3 px-4 text-on-surface-variant/70">{topic.correct}</td>
                         <td className="py-3 px-4">
-                          <span className={`px-3 py-1 rounded text-sm ${
-                            topic.accuracy >= 75 ? 'bg-emerald-500/20 text-emerald-400' :
-                            topic.accuracy >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
-                            'bg-red-500/20 text-red-400'
+                          <span className={`px-3 py-1 rounded text-sm font-medium ${
+                            topic.accuracy >= 75 ? 'bg-emerald-50/80 text-emerald-700 border border-emerald-200/50' :
+                            topic.accuracy >= 50 ? 'bg-yellow-50/80 text-yellow-700 border border-yellow-200/50' :
+                            'bg-red-50/80 text-red-700 border border-red-200/50'
                           }`}>
                             {topic.accuracy}%
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-slate-400">{topic.weakness}</td>
-                        <td className="py-3 px-4 text-slate-400">{topic.bestScore}%</td>
+                        <td className="py-3 px-4 text-on-surface-variant/70">{topic.weakness}</td>
+                        <td className="py-3 px-4 text-on-surface-variant/70">{topic.bestScore}%</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </motion.div>
 
             {report.recommendations.length > 0 && (
-              <div className="card">
-                <h2 className="text-2xl font-bold mb-6 text-slate-200">Recommendations</h2>
+              <motion.div variants={itemVariants} className="glass-pane rounded-xl p-6 border border-black/8">
+                <h2 className="text-2xl text-on-surface font-bold mb-6">Recommendations</h2>
                 <div className="space-y-4">
                   {report.recommendations.map((rec, idx) => (
-                    <div key={idx} className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                    <div key={idx} className="bg-white/40 backdrop-blur-sm border border-black/8 rounded-xl p-4">
                       <div className="flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-1" />
+                        <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-1" />
                         <div>
-                          <h3 className="font-semibold text-slate-200">{rec.topic}</h3>
-                          <p className="text-sm text-slate-400 mt-1">{rec.recommendation}</p>
-                          <p className="text-xs text-slate-500 mt-2">Current Score: {rec.currentScore}%</p>
+                          <h3 className="font-semibold text-on-surface">{rec.topic}</h3>
+                          <p className="text-sm text-on-surface-variant/70 mt-1">{rec.recommendation}</p>
+                          <p className="text-xs text-on-surface-variant/70 mt-2">Current Score: {rec.currentScore}%</p>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </motion.div>
             )}
-          </>
+          </motion.div>
         )}
-      </main>
     </div>
   )
 }

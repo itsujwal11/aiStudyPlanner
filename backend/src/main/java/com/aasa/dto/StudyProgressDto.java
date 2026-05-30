@@ -1,6 +1,7 @@
 package com.aasa.dto;
 
 import lombok.*;
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -16,4 +17,7 @@ public class StudyProgressDto {
     private Integer totalAttempts;
     private Integer correctAttempts;
     private Double priorityScore;
+    private Double masteryLevel;
+    private Integer sm2Interval;
+    private LocalDate nextReviewDate;
 }

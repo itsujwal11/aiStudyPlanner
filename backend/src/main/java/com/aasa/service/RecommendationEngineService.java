@@ -57,8 +57,8 @@ public class RecommendationEngineService {
         Double urgencyScore = 1.0 / (daysUntilExam + 1.0);
 
         return (0.35 * complexityScore) +
-               (0.30 * importanceScore) +
-               (0.20 * weaknessScore) +
+               (0.25 * importanceScore) +
+               (0.25 * weaknessScore) +
                (0.15 * urgencyScore);
     }
 
