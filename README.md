@@ -63,14 +63,7 @@ aiStudyPlanner/
 │   │   ├── api.js                   # API Configuration
 │   │   └── App.jsx
 │   └── package.json
-│
-├── SYSTEM_FIXES_COMPLETED.md        # Detailed fix documentation
-├── IMPLEMENTATION_GUIDE.md          # Complete system guide
-├── QUICK_START.md                   # Quick start guide
-├── FIXES_SUMMARY.md                 # Summary of all fixes
-├── COMPLETE_CHANGES_LIST.md         # List of all changes
-└── README.md                        # This file
-```
+
 
 ---
 
@@ -102,51 +95,6 @@ npm run dev
 **3. Access**
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:9090`
-
----
-
-## 📚 Documentation
-
-### 1. **SYSTEM_FIXES_COMPLETED.md** (3,500+ words)
-Detailed explanation of each fix:
-- PDF extraction and text cleaning
-- Gemini API integration
-- Topic analysis
-- Quiz generation
-- Study progress tracking
-- Priority recalculation
-- Dashboard updates
-
-### 2. **IMPLEMENTATION_GUIDE.md** (4,000+ words)
-Complete system architecture:
-- End-to-end workflow with diagrams
-- API endpoint documentation
-- Database schema
-- Configuration guide
-- Testing procedures
-- Troubleshooting guide
-
-### 3. **QUICK_START.md** (2,000+ words)
-Quick setup and usage:
-- Installation steps
-- First-time usage
-- Configuration
-- Troubleshooting
-- Performance tips
-
-### 4. **FIXES_SUMMARY.md** (2,500+ words)
-Summary of all changes:
-- Issues fixed with details
-- Code quality improvements
-- Testing checklist
-- Deployment checklist
-
-### 5. **COMPLETE_CHANGES_LIST.md** (2,000+ words)
-Complete list of all modifications:
-- Files modified
-- Changes in each file
-- Compilation status
-- Verification checklist
 
 ---
 
@@ -467,28 +415,6 @@ SELECT COUNT(*) FROM quizzes;
 5. Configure environment variables
 6. Start services
 7. Monitor logs
-
----
-
-## 📞 Support
-
-### Documentation
-- See SYSTEM_FIXES_COMPLETED.md for detailed fixes
-- See IMPLEMENTATION_GUIDE.md for complete guide
-- See QUICK_START.md for quick setup
-
-### Troubleshooting
-- Check logs for error messages
-- Verify configuration
-- Test API endpoints
-- Review database schema
-
-### Common Issues
-- **Port already in use**: Kill process or use different port
-- **Database connection failed**: Verify credentials and database is running
-- **Gemini API error**: Check API key and internet connection
-- **PDF extraction fails**: Verify PDF is valid
-
 ---
 
 ## 📊 Code Statistics
