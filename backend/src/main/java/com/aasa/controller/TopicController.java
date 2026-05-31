@@ -8,7 +8,6 @@ import com.aasa.entity.Topic;
 import com.aasa.service.PdfManagementService;
 import com.aasa.service.TopicAnalysisService;
 import com.aasa.service.AuthService;
-import com.aasa.service.OllamaAiService;
 import java.time.temporal.ChronoUnit;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +34,6 @@ public class TopicController {
     @Autowired private AuthService           authService;
     @Autowired
     private ScoringEngineService scoringEngineService;
-private OllamaAiService ollamaAiService;
 
     @PostMapping("/analyze/{pdfId}")
     public ResponseEntity<?> analyzePdf(@PathVariable Long pdfId) {
@@ -62,7 +60,9 @@ private OllamaAiService ollamaAiService;
             List<Topic> topics = topicAnalysisService.analyzeAndCreateTopics(pdf);
             logger.info("Topics created: " + topics.size());
 
-            pdfManagementService.markAsAnalyzed(pdfId);
+            if (!topics.isEmpty()) {
+                pdfManagementService.markAsAnalyzed(pdfId);
+            }
 
             List<TopicDto> topicDtos = topicAnalysisService.getTopicsByPdf(pdfId);
             return ResponseEntity.status(HttpStatus.CREATED).body(topicDtos);

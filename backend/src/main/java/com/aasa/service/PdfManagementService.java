@@ -47,28 +47,43 @@ public class PdfManagementService {
     private String uploadDir;
 
     @Transactional
-    public PdfDocument uploadPdf(MultipartFile file, User user, LocalDate examDate) throws IOException {
-        String fileName = file.getOriginalFilename();
-        logger.info("Uploading PDF: " + fileName + " for user: " + user.getId());
+    public PdfDocumentDto uploadPdf(MultipartFile file, User user, LocalDate examDate) {
+        try {
+            String fileName = file.getOriginalFilename();
+            logger.info("Uploading PDF: " + fileName + " for user: " + user.getId());
 
-        String uniqueFileName = UUID.randomUUID() + "_" + fileName;
-        String filePath = uploadDir + "/" + uniqueFileName;
+            String uniqueFileName = UUID.randomUUID() + "_" + fileName;
+            String filePath = uploadDir + "/" + uniqueFileName;
 
-        Files.createDirectories(Paths.get(uploadDir));
-        Files.write(Paths.get(filePath), file.getBytes());
+            Files.createDirectories(Paths.get(uploadDir));
+            Files.write(Paths.get(filePath), file.getBytes());
 
-        String extractedText = pdfExtractionService.extractTextFromPdf(file);
+            String extractedText = pdfExtractionService.extractTextFromPdf(file);
 
-        PdfDocument pdfDocument = PdfDocument.builder()
-                .user(user)
-                .fileName(fileName)
-                .filePath(filePath)
-                .examDate(examDate)
-                .extractedText(extractedText)
-                .isAnalyzed(false)
-                .build();
+            PdfDocument pdfDocument = PdfDocument.builder()
+                    .user(user)
+                    .fileName(fileName)
+                    .filePath(filePath)
+                    .examDate(examDate)
+                    .extractedText(extractedText)
+                    .isAnalyzed(false)
+                    .build();
 
-        return pdfDocumentRepository.save(pdfDocument);
+            PdfDocument saved = pdfDocumentRepository.save(pdfDocument);
+            logger.info("PDF saved with ID: " + saved.getId());
+
+            return PdfDocumentDto.builder()
+                    .id(saved.getId())
+                    .fileName(saved.getFileName())
+                    .uploadDate(saved.getUploadDate())
+                    .examDate(saved.getExamDate())
+                    .isAnalyzed(false)
+                    .topicCount(0)
+                    .build();
+        } catch (IOException e) {
+            logger.severe("IO Error during PDF upload: " + e.getMessage());
+            throw new RuntimeException("Failed to process PDF file: " + e.getMessage(), e);
+        }
     }
 
     @Transactional
@@ -118,6 +133,19 @@ public class PdfManagementService {
     public PdfDocument getPdfById(Long pdfId) {
         return pdfDocumentRepository.findById(pdfId)
                 .orElseThrow(() -> new RuntimeException("PDF not found"));
+    }
+
+    public PdfDocumentDto getPdfByIdDto(Long pdfId) {
+        PdfDocument pdf = getPdfById(pdfId);
+        int topicCount = topicRepository.findByPdfDocumentId(pdfId).size();
+        return PdfDocumentDto.builder()
+                .id(pdf.getId())
+                .fileName(pdf.getFileName())
+                .uploadDate(pdf.getUploadDate())
+                .examDate(pdf.getExamDate())
+                .isAnalyzed(pdf.getIsAnalyzed())
+                .topicCount(topicCount)
+                .build();
     }
 
     @Transactional(readOnly = true)
