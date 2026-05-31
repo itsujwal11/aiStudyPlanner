@@ -23,10 +23,7 @@ public class GeminiAiService {
     private static final String[][] GEMINI_ENDPOINTS = {
         {"v1", "gemini-1.5-flash"},
         {"v1", "gemini-2.5-flash"},
-        {"v1beta", "gemini-1.5-flash"},
-        {"v1beta", "gemini-2.5-flash"},
         {"v1", "gemini-2.0-flash-exp"},
-        {"v1beta", "gemini-2.0-flash-exp"},
     };
 
     private static final int TIMEOUT_SECONDS = 300;
@@ -90,7 +87,6 @@ public class GeminiAiService {
 
         var genConfig = root.putObject("generationConfig");
         genConfig.put("temperature", 0.2);
-        genConfig.put("responseMimeType", "application/json");
 
         String requestBody = objectMapper.writeValueAsString(root);
         String fullUrl = baseUrl + apiKey;
