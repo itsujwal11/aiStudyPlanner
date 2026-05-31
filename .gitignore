@@ -46,3 +46,9 @@ logs/
 .env
 .env.local
 .env.*.local
+
+uploads/
+
+backend/backend.log*
+backend.log*
+*.gz

@@ -21,9 +21,10 @@ public class GeminiAiService {
     private static final Logger logger = Logger.getLogger(GeminiAiService.class.getName());
 
     private static final String[][] GEMINI_ENDPOINTS = {
-        {"v1", "gemini-1.5-flash"},
         {"v1", "gemini-2.5-flash"},
-        {"v1", "gemini-2.0-flash-exp"},
+        {"v1", "gemini-2.0-flash"},
+        {"v1", "gemini-2.5-flash-lite"},
+        {"v1", "gemini-3.1-flash-lite"},
     };
 
     private static final int TIMEOUT_SECONDS = 300;
