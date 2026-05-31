@@ -5,7 +5,7 @@ import { StudyTimer } from '../components/StudyTimer'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import toast from 'react-hot-toast'
-import { BookOpen, AlertCircle, CheckCircle, XCircle, ArrowRight, BarChart3 } from 'lucide-react'
+import { BookOpen, AlertCircle, CheckCircle, XCircle, ArrowRight, BarChart3, ArrowLeft } from 'lucide-react'
 
 export const Study = () => {
   const { pdfId } = useParams()
@@ -177,6 +177,8 @@ export const Study = () => {
           <p className="text-red-700 text-sm">{error}</p>
         </div>
       )}
+
+      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm"><ArrowLeft className="w-4 h-4" /> Back to Dashboard</button>
 
       {/* Header */}
       <div className="glass-pane rounded-xl p-6 border border-black/8 mb-6">

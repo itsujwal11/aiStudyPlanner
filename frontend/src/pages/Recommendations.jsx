@@ -56,7 +56,7 @@ export const Recommendations = () => {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-        <motion.h1 className="text-4xl text-on-surface font-bold mb-0" variants={item}>Study Recommendations</motion.h1>
+        <motion.h1 className="text-2xl md:text-4xl text-on-surface font-bold mb-0" variants={item}>Study Recommendations</motion.h1>
 
         {error && (
           <motion.div className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6" variants={item}>

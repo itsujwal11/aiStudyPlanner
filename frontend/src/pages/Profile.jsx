@@ -58,7 +58,7 @@ export const Profile = () => {
     <div className="max-w-2xl">
       <div className="flex items-center gap-3 mb-8">
         <Settings className="w-8 h-8 text-primary" />
-        <h1 className="text-4xl text-on-surface font-bold">Profile Settings</h1>
+        <h1 className="text-2xl md:text-4xl text-on-surface font-bold">Profile Settings</h1>
       </div>
 
       {error && (
