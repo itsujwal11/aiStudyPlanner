@@ -6,13 +6,10 @@ import { useCountUp } from '../hooks/useCountUp'
 import { motion } from 'framer-motion'
 import { Upload, BookOpen, TrendingUp, Zap, Target, BarChart3, ArrowRight, FileText, Users, Database, Brain, ClipboardList, AlertCircle } from 'lucide-react'
 
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
-const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }
-
 function GlassStatCard({ icon: Icon, label, value, color = 'text-primary' }) {
   const count = useCountUp(value, 800)
   return (
-    <motion.div variants={item} className="glass-pane rounded-xl p-5 border border-black/8 hover:bg-white/85 transition-all duration-200">
+    <div className="glass-pane rounded-xl p-5 border border-black/8 hover:bg-white/85 transition-all duration-200">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-on-surface-variant/70 font-medium mb-1">{label}</p>
@@ -22,7 +19,7 @@ function GlassStatCard({ icon: Icon, label, value, color = 'text-primary' }) {
           <Icon className={`w-5 h-5 ${color}`} />
         </div>
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -47,22 +44,22 @@ function AdminDashboard() {
   }
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
-      <motion.div variants={item}>
+    <div className="space-y-8">
+      <div>
         <h1 className="text-2xl md:text-[40px] font-semibold text-on-surface leading-[48px]">Admin Dashboard</h1>
         <p className="text-lg text-on-surface-variant/70 mt-1">System overview and management</p>
-      </motion.div>
+      </div>
 
-      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <GlassStatCard icon={Users} label="Users" value={stats?.User || 0} color="text-primary" />
         <GlassStatCard icon={FileText} label="PDFs" value={stats?.PdfDocument || 0} color="text-secondary" />
         <GlassStatCard icon={Brain} label="Topics" value={stats?.Topic || 0} color="text-emerald-600" />
         <GlassStatCard icon={ClipboardList} label="Quizzes" value={stats?.Quiz || 0} color="text-violet-600" />
         <GlassStatCard icon={BarChart3} label="Attempts" value={stats?.QuizAttempt || 0} color="text-orange-600" />
         <GlassStatCard icon={TrendingUp} label="Progress" value={stats?.StudyProgress || 0} color="text-cyan-600" />
-      </motion.div>
+      </div>
 
-      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <button onClick={() => navigate('/admin')} className="glass-pane rounded-xl p-6 border border-black/8 text-left hover:bg-white/85 transition-all group">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -88,8 +85,8 @@ function AdminDashboard() {
             <ArrowRight className="w-5 h-5 text-on-surface-variant/30 group-hover:text-primary ml-auto" />
           </div>
         </button>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }
 
@@ -100,7 +97,6 @@ export const Dashboard = () => {
   const [error, setError] = useState('')
   const { user, isAdmin } = useAuth()
   const navigate = useNavigate()
-
   useEffect(() => { fetchDashboard() }, [])
 
   const fetchDashboard = async () => {
@@ -119,7 +115,7 @@ export const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center animate-fade-in">
           <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent mx-auto mb-4" />
           <p className="text-on-surface-variant">Loading dashboard...</p>
@@ -129,30 +125,32 @@ export const Dashboard = () => {
   }
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
+    <div className="space-y-8">
       {error && (
-        <motion.div variants={item} className="glass-pane rounded-xl p-4 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3">
+        <div className="glass-pane rounded-xl p-4 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <p className="text-sm">{error}</p>
-        </motion.div>
+        </div>
       )}
 
-      <motion.div variants={item}>
+      <div>
         <h1 className="text-2xl md:text-[40px] font-semibold text-on-surface leading-[48px]">
-          Welcome back, {user?.name?.split(' ')[0] || 'Student'}
+          My Dashboard
         </h1>
-        <p className="text-lg text-on-surface-variant/70 mt-1">Here's your study overview</p>
-      </motion.div>
+        <p className="text-lg text-on-surface-variant/70 mt-1">
+          {user?.name ? `Welcome back, ${user.name}` : 'Here is your study overview'}
+        </p>
+      </div>
 
-      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
         <GlassStatCard icon={BookOpen} label="Total PDFs" value={dashboard?.totalPdfs || 0} color="text-primary" />
         <GlassStatCard icon={Target} label="Topics" value={dashboard?.totalTopics || 0} color="text-secondary" />
         <GlassStatCard icon={TrendingUp} label="Avg Score" value={Math.round(dashboard?.averageScore || 0)} color="text-emerald-600" />
         <GlassStatCard icon={Zap} label="Days Left" value={dashboard?.daysUntilExam || 0} color="text-orange-600" />
-      </motion.div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <motion.div variants={item} className="lg:col-span-2">
+        <div className="lg:col-span-2">
           <div className="glass-pane rounded-xl p-6 border border-black/8">
             <h2 className="text-2xl font-semibold text-on-surface mb-5 flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-primary" />
@@ -192,9 +190,9 @@ export const Dashboard = () => {
               )}
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div variants={item} className="space-y-6">
+        <div className="space-y-6">
           <div className="glass-pane rounded-xl p-6 border border-black/8">
             <h2 className="text-lg font-bold text-on-surface mb-4">Quick Actions</h2>
             <button onClick={() => navigate('/upload')} className="btn-glass-primary w-full mb-3">
@@ -228,10 +226,10 @@ export const Dashboard = () => {
               )}
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
 
-      <motion.div variants={item}>
+      <div>
         <div className="glass-pane rounded-xl p-6 border border-black/8">
           <h2 className="text-2xl font-semibold text-on-surface mb-5 flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
@@ -260,7 +258,7 @@ export const Dashboard = () => {
             )}
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }

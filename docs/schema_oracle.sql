@@ -97,4 +97,30 @@ CREATE INDEX idx_progress_user ON study_progress(user_id);
 CREATE INDEX idx_progress_topic ON study_progress(topic_id);
 CREATE INDEX idx_user_email ON users(email);
 
+-- Flashcards table
+CREATE TABLE flashcards (
+    id NUMBER PRIMARY KEY,
+    topic_id NUMBER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    front_text VARCHAR2(2000) NOT NULL,
+    back_text VARCHAR2(2000) NOT NULL,
+    difficulty_est NUMBER(10,2)
+);
+
+CREATE SEQUENCE flashcard_id_seq START WITH 1 INCREMENT BY 1;
+
+-- Flashcard Reviews table
+CREATE TABLE flashcard_reviews (
+    id NUMBER PRIMARY KEY,
+    flashcard_id NUMBER NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+    user_id NUMBER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    box NUMBER DEFAULT 0,
+    interval_days NUMBER DEFAULT 0,
+    efactor NUMBER(10,2) DEFAULT 2.5,
+    repetitions NUMBER DEFAULT 0,
+    next_review_at DATE,
+    last_rating NUMBER
+);
+
+CREATE SEQUENCE fc_review_id_seq START WITH 1 INCREMENT BY 1;
+
 COMMIT;

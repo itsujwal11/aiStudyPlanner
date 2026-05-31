@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LogOut, LayoutDashboard, Database, Upload, BookOpen, LineChart,
-  Lightbulb, FileText, User, Brain, Menu, X
+  Lightbulb, FileText, User, Menu, X
 } from 'lucide-react'
 
 const userNav = [
@@ -13,7 +13,7 @@ const userNav = [
   { path: '/study', label: 'Study', icon: BookOpen },
   { path: '/analytics', label: 'Analytics', icon: LineChart },
   { path: '/recommendations', label: 'Recommend', icon: Lightbulb },
-  { path: '/flashcards', label: 'Flashcards', icon: Brain },
+  // { path: '/flashcards', label: 'Flashcards', icon: Brain },
   { path: '/planner', label: 'Planner', icon: FileText },
   { path: '/profile', label: 'Profile', icon: User },
 ]

@@ -31,8 +31,8 @@ public class TopicAnalysisService {
     @Autowired
     private QuizEngineService quizEngineService;
 
-    @Autowired
-    private FlashcardService flashcardService;
+    // @Autowired
+    // private FlashcardService flashcardService;
 
     public List<Topic> analyzeAndCreateTopics(PdfDocument pdfDocument) throws Exception {
         logger.info("Analyzing PDF document: " + pdfDocument.getFileName());
@@ -68,12 +68,12 @@ public class TopicAnalysisService {
                 logger.warning("No quizzes found for topic: " + topic.getTitle());
             }
 
-            // Generate flashcards for this topic
-            try {
-                generateFlashcardsForTopic(topic, analysis);
-            } catch (Exception e) {
-                logger.warning("Error generating flashcards for topic " + topic.getTitle() + ": " + e.getMessage());
-            }
+            // Generate flashcards for this topic (disabled)
+            // try {
+            //     generateFlashcardsForTopic(topic, analysis);
+            // } catch (Exception e) {
+            //     logger.warning("Error generating flashcards for topic " + topic.getTitle() + ": " + e.getMessage());
+            // }
         }
 
         return savedTopics;
@@ -165,42 +165,38 @@ public class TopicAnalysisService {
         topicRepository.save(topic);
     }
 
-    private void generateFlashcardsForTopic(Topic topic, AiAnalysisResponse.TopicAnalysis analysis) {
-        String desc = analysis.getDescription();
-        if (desc == null || desc.isBlank()) {
-            desc = "Study topic: " + topic.getTitle();
-        }
-
-        flashcardService.createFlashcard(topic,
-                "What is " + topic.getTitle() + "?",
-                desc,
-                topic.getComplexityScore());
-
-        String[] sentences = desc.split("[.!?]");
-        if (sentences.length >= 2) {
-            String second = sentences[1].trim();
-            if (!second.isBlank()) {
-                flashcardService.createFlashcard(topic,
-                        "Explain: " + topic.getTitle(),
-                        second,
-                        topic.getComplexityScore());
-            }
-        }
-
-        if (analysis.getQuiz() != null) {
-            for (int i = 0; i < Math.min(analysis.getQuiz().size(), 3); i++) {
-                AiAnalysisResponse.TopicAnalysis.QuizQuestion q = analysis.getQuiz().get(i);
-                if (q.getQuestion() != null && q.getAnswer() != null) {
-                    flashcardService.createFlashcard(topic,
-                            q.getQuestion(),
-                            q.getAnswer() + (q.getExplanation() != null ? " — " + q.getExplanation() : ""),
-                            topic.getComplexityScore());
-                }
-            }
-        }
-
-        logger.info("Generated flashcards for topic: " + topic.getTitle());
-    }
+    // private void generateFlashcardsForTopic(Topic topic, AiAnalysisResponse.TopicAnalysis analysis) {
+    //     String desc = analysis.getDescription();
+    //     if (desc == null || desc.isBlank()) {
+    //         desc = "Study topic: " + topic.getTitle();
+    //     }
+    //     flashcardService.createFlashcard(topic,
+    //             "What is " + topic.getTitle() + "?",
+    //             desc,
+    //             topic.getComplexityScore());
+    //     String[] sentences = desc.split("[.!?]");
+    //     if (sentences.length >= 2) {
+    //         String second = sentences[1].trim();
+    //         if (!second.isBlank()) {
+    //             flashcardService.createFlashcard(topic,
+    //                     "Explain: " + topic.getTitle(),
+    //                     second,
+    //                     topic.getComplexityScore());
+    //         }
+    //     }
+    //     if (analysis.getQuiz() != null) {
+    //         for (int i = 0; i < Math.min(analysis.getQuiz().size(), 3); i++) {
+    //             AiAnalysisResponse.TopicAnalysis.QuizQuestion q = analysis.getQuiz().get(i);
+    //             if (q.getQuestion() != null && q.getAnswer() != null) {
+    //                 flashcardService.createFlashcard(topic,
+    //                         q.getQuestion(),
+    //                         q.getAnswer() + (q.getExplanation() != null ? " — " + q.getExplanation() : ""),
+    //                         topic.getComplexityScore());
+    //             }
+    //         }
+    //     }
+    //     logger.info("Generated flashcards for topic: " + topic.getTitle());
+    // }
 
     private TopicDto convertToDto(Topic topic) {
         return TopicDto.builder()

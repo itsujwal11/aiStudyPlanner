@@ -105,7 +105,7 @@ export const Reports = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="glass-pane rounded-xl p-8 border border-black/8 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-on-surface-variant/70">Generating report...</p>
@@ -115,7 +115,7 @@ export const Reports = () => {
   }
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-5xl mx-auto">
       <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
         <ArrowLeft className="w-4 h-4" /> Back to Dashboard
       </button>
