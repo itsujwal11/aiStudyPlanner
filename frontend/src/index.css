@@ -21,8 +21,9 @@ body {
 .mesh-bg {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
+
   background:
     radial-gradient(ellipse 80% 60% at 0% 20%, rgba(0, 88, 188, 0.10) 0%, transparent 60%),
     radial-gradient(ellipse 60% 50% at 100% 0%, rgba(0, 150, 150, 0.08) 0%, transparent 60%),
