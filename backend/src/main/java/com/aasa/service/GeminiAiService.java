@@ -22,12 +22,11 @@ public class GeminiAiService {
 
     private static final String[][] GEMINI_ENDPOINTS = {
         {"v1", "gemini-1.5-flash"},
-        {"v1", "gemini-1.5-flash-002"},
+        {"v1", "gemini-2.5-flash"},
         {"v1beta", "gemini-1.5-flash"},
-        {"v1", "gemini-1.5-pro"},
-        {"v1beta", "gemini-pro"},
-        {"v1", "gemini-pro"},
-        {"v1beta", "gemini-1.5-pro"},
+        {"v1beta", "gemini-2.5-flash"},
+        {"v1", "gemini-2.0-flash-exp"},
+        {"v1beta", "gemini-2.0-flash-exp"},
     };
 
     private static final int TIMEOUT_SECONDS = 300;

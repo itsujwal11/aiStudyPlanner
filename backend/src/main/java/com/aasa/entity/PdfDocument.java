@@ -34,7 +34,8 @@ public class PdfDocument {
     @Column(name = "exam_date", nullable = false)
     private LocalDate examDate;
 
-    @Column(name = "extracted_text", columnDefinition = "TEXT")
+    @Column(name = "extracted_text")
+    @Lob
     private String extractedText;
 
     @Column(name = "is_analyzed")
