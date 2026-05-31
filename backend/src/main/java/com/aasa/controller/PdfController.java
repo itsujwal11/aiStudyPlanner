@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 @RestController
@@ -47,53 +48,40 @@ public class PdfController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("examDate") String examDate,
             Authentication authentication) {
-        try {
-            logger.info("PDF upload request - File: " + file.getOriginalFilename() + ", Exam Date: " + examDate);
+        logger.info("PDF upload request - File: " + (file != null ? file.getOriginalFilename() : "null") + ", Exam Date: " + examDate);
 
-            if (file.isEmpty()) {
-                logger.warning("Uploaded file is empty");
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("File is empty");
-            }
-
-            String contentType = file.getContentType();
-            if (contentType == null || !contentType.equalsIgnoreCase("application/pdf")) {
-                logger.warning("Invalid file type: " + contentType);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid file type. Please upload a PDF");
-            }
-
-            long maxSize = 50L * 1024 * 1024;
-            if (file.getSize() > maxSize) {
-                logger.warning("File exceeds size limit: " + file.getSize());
-                return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body("File size exceeds 50MB limit");
-            }
-
-            User user = authService.getUserByEmail(authentication.getName());
-            logger.info("User authenticated: " + user.getEmail());
-
-            java.time.LocalDate parsedDate;
-            try {
-                parsedDate = java.time.LocalDate.parse(examDate);
-            } catch (java.time.format.DateTimeParseException dtpe) {
-                logger.warning("Invalid examDate format: " + examDate);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid examDate format. Expected YYYY-MM-DD");
-            }
-
-            PdfDocument pdf = pdfManagementService.uploadPdf(file, user, parsedDate);
-            logger.info("PDF uploaded successfully with ID: " + pdf.getId());
-
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(convertToDto(pdf));
-        } catch (IOException e) {
-            logger.severe("IO Error during PDF upload: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("File upload error");
-        } catch (RuntimeException e) {
-            logger.warning("Validation error during PDF upload: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        } catch (Exception e) {
-            logger.severe("Error during PDF upload: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Upload failed");
+        if (file == null || file.isEmpty()) {
+            logger.warning("Uploaded file is empty or null");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "File is empty"));
         }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.equalsIgnoreCase("application/pdf")) {
+            logger.warning("Invalid file type: " + contentType);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "Invalid file type. Please upload a PDF"));
+        }
+
+        long maxSize = 50L * 1024 * 1024;
+        if (file.getSize() > maxSize) {
+            logger.warning("File exceeds size limit: " + file.getSize());
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(Map.of("error", "File size exceeds 50MB limit"));
+        }
+
+        User user = authService.getUserByEmail(authentication.getName());
+        logger.info("User authenticated: " + user.getEmail());
+
+        java.time.LocalDate parsedDate;
+        try {
+            parsedDate = java.time.LocalDate.parse(examDate);
+        } catch (java.time.format.DateTimeParseException dtpe) {
+            logger.warning("Invalid examDate format: " + examDate);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "Invalid examDate format. Expected YYYY-MM-DD"));
+        }
+
+        PdfDocumentDto result = pdfManagementService.uploadPdf(file, user, parsedDate);
+        logger.info("PDF uploaded successfully with ID: " + result.getId());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
     @GetMapping
@@ -111,8 +99,7 @@ public class PdfController {
     @GetMapping("/{pdfId}")
     public ResponseEntity<PdfDocumentDto> getPdf(@PathVariable Long pdfId) {
         try {
-            PdfDocument pdf = pdfManagementService.getPdfById(pdfId);
-            return ResponseEntity.ok(convertToDto(pdf));
+            return ResponseEntity.ok(pdfManagementService.getPdfByIdDto(pdfId));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }

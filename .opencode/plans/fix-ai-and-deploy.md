@@ -1,3 +1,28 @@
+# Fix Plan: AI Analysis + Deploy
+
+## Changes Required
+
+### 1. Replace `backend/src/main/java/com/aasa/service/GeminiAiService.java`
+
+Key changes:
+- Text limit: 30K → **100K** characters
+- Model fallback: try `gemini-1.5-flash` → `gemini-pro` → `gemini-1.5-pro`
+- On failure: throw error with real message instead of returning empty list silently
+
+### 2. Fix `backend/src/main/java/com/aasa/controller/TopicController.java`
+
+**Change (line 60-63):** Only mark PDF as analyzed when topics were actually created
+
+### 3. Push to GitHub & Redeploy
+
+- Commit and push `main` branch
+- Set `VITE_API_URL` on Vercel dashboard to `https://aistudyplanner-2-swev.onrender.com/api`
+- Render auto-deploys backend, Vercel auto-deploys frontend
+
+## Exact File Contents
+
+### `GeminiAiService.java`
+```java
 package com.aasa.service;
 
 import com.aasa.dto.AiAnalysisResponse;
@@ -20,14 +45,10 @@ public class GeminiAiService {
 
     private static final Logger logger = Logger.getLogger(GeminiAiService.class.getName());
 
-    private static final String[][] GEMINI_ENDPOINTS = {
-        {"v1", "gemini-1.5-flash"},
-        {"v1", "gemini-1.5-flash-002"},
-        {"v1beta", "gemini-1.5-flash"},
-        {"v1", "gemini-1.5-pro"},
-        {"v1beta", "gemini-pro"},
-        {"v1", "gemini-pro"},
-        {"v1beta", "gemini-1.5-pro"},
+    private static final String[] GEMINI_MODELS = {
+        "gemini-1.5-flash",
+        "gemini-pro",
+        "gemini-1.5-pro"
     };
 
     private static final int TIMEOUT_SECONDS = 300;
@@ -52,11 +73,9 @@ public class GeminiAiService {
         String prompt = buildPrompt(extractedText, MAX_TOPICS);
         List<String> errors = new ArrayList<>();
 
-        for (String[] endpoint : GEMINI_ENDPOINTS) {
-            String apiVersion = endpoint[0];
-            String model = endpoint[1];
-            logger.info("Trying Gemini model: " + model + " (API " + apiVersion + ")");
-            String url = "https://generativelanguage.googleapis.com/" + apiVersion + "/models/" + model + ":generateContent?key=";
+        for (String model : GEMINI_MODELS) {
+            logger.info("Trying Gemini model: " + model);
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=";
 
             try {
                 String responseJson = callGeminiApi(prompt, url);
@@ -68,7 +87,7 @@ public class GeminiAiService {
                     }
                 }
             } catch (Exception e) {
-                String msg = model + " (API " + apiVersion + ") failed: " + e.getMessage();
+                String msg = model + " failed: " + e.getMessage();
                 logger.warning(msg);
                 errors.add(msg);
             }
@@ -254,3 +273,29 @@ public class GeminiAiService {
                 + "Material:\n" + text;
     }
 }
+```
+
+### `TopicController.java` (single edit)
+
+Old (lines 60-66):
+```java
+List<Topic> topics = topicAnalysisService.analyzeAndCreateTopics(pdf);
+logger.info("Topics created: " + topics.size());
+pdfManagementService.markAsAnalyzed(pdfId);
+```
+
+New:
+```java
+List<Topic> topics = topicAnalysisService.analyzeAndCreateTopics(pdf);
+logger.info("Topics created: " + topics.size());
+if (!topics.isEmpty()) {
+    pdfManagementService.markAsAnalyzed(pdfId);
+}
+```
+
+## Deploy Steps
+
+1. `git add -A && git commit -m "Fix AI analysis: model fallback, 100K text limit, surface errors"`
+2. `git push origin main`
+3. Go to Vercel dashboard → project → Settings → Environment Variables → add `VITE_API_URL=https://aistudyplanner-2-swev.onrender.com/api`
+4. Done — Render and Vercel auto-deploy
