@@ -31,8 +31,8 @@ function PageLayout({ children }) {
     <>
       <div className="mesh-bg" />
       <Sidebar />
-      <main className="ml-sidebar min-h-screen">
-        <div className="max-w-container mx-auto px-gutter py-8">
+      <main className="md:ml-sidebar min-h-screen">
+        <div className="max-w-container mx-auto px-4 md:px-gutter py-8 pt-16 md:pt-8">
           {children}
         </div>
       </main>

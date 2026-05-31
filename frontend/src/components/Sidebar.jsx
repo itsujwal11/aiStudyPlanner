@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   LogOut, LayoutDashboard, Database, Upload, BookOpen, LineChart,
-  Lightbulb, FileText, User, Brain
+  Lightbulb, FileText, User, Brain, Menu, X
 } from 'lucide-react'
 
 const userNav = [
@@ -24,19 +24,29 @@ const adminNav = [
 ]
 
 export const Sidebar = () => {
-  const navigate = useNavigate()
-  const location = useLocation()
+  const navigate = useLocation()
+  const navigateFn = useNavigate()
   const { user, logout, isAdmin } = useAuth()
   const navItems = useMemo(() => isAdmin ? adminNav : userNav, [isAdmin])
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigateFn('/login')
+    setMobileOpen(false)
   }
 
-  return (
-    <aside className="glass-sidebar fixed left-0 top-0 h-screen w-sidebar z-50 flex flex-col">
-      {/* Brand */}
+  const handleNav = (path) => {
+    navigateFn(path)
+    setMobileOpen(false)
+  }
+
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [navigate.pathname])
+
+  const sidebarContent = (
+    <>
       <div className="px-6 pt-8 pb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shadow-sm">
@@ -48,18 +58,15 @@ export const Sidebar = () => {
           </div>
         </div>
       </div>
-
       <div className="glass-divider mx-6" />
-
-      {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = location.pathname === item.path
+          const isActive = navigate.pathname === item.path
           return (
             <button
               key={item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => handleNav(item.path)}
               className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                 isActive
                   ? 'text-primary bg-primary/10'
@@ -79,8 +86,6 @@ export const Sidebar = () => {
           )
         })}
       </nav>
-
-      {/* User section */}
       <div className="px-4 pb-6">
         <div className="glass-divider mb-4 mx-2" />
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/60">
@@ -102,6 +107,52 @@ export const Sidebar = () => {
           </button>
         </div>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="md:hidden fixed top-4 left-4 z-[60] p-2.5 rounded-xl glass-pane bg-white/80 border border-black/8 shadow-sm"
+        aria-label="Open menu"
+      >
+        <Menu className="w-5 h-5 text-on-surface" />
+      </button>
+
+      <aside className="hidden md:flex glass-sidebar fixed left-0 top-0 h-screen w-sidebar z-50 flex-col">
+        {sidebarContent}
+      </aside>
+
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/30 z-[70] md:hidden"
+              onClick={() => setMobileOpen(false)}
+            />
+            <motion.aside
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+              className="glass-sidebar fixed left-0 top-0 h-screen w-sidebar z-[80] flex flex-col md:hidden"
+            >
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="absolute top-4 right-4 p-2 rounded-lg text-on-surface-variant hover:bg-white/60"
+                aria-label="Close menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              {sidebarContent}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   )
 }

@@ -383,7 +383,7 @@ export const Study = () => {
               </div>
 
               {quizStats.total > 0 && (
-                <div className="mt-6 grid grid-cols-4 gap-4">
+                <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="glass-pane rounded-xl p-4 border border-black/8">
                     <p className="text-on-surface-variant/70 text-xs mb-1">Correct</p>
                     <p className="text-xl font-bold text-emerald-600">{quizStats.correct}</p>
