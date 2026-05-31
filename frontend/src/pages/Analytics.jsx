@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { analyticsAPI } from '../api'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { TrendingUp, Target, Zap, Clock, AlertCircle } from 'lucide-react'
+import { TrendingUp, Target, Zap, Clock, AlertCircle, ArrowLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
 const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
@@ -12,6 +13,7 @@ export const Analytics = () => {
   const [comparison, setComparison] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const navigate = useNavigate()
 
   useEffect(() => {
     fetchAnalytics()
@@ -49,6 +51,9 @@ export const Analytics = () => {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+      </button>
       <h1 className="text-2xl md:text-4xl font-bold text-on-surface mb-0">Analytics & Insights</h1>
 
       {error && (

@@ -113,6 +113,9 @@ export const Admin = () => {
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-start justify-between">
           <div>
+            <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+            </button>
             <button onClick={handleBack} className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 mb-3">
               <ArrowLeft className="w-4 h-4" /> Back to tables
             </button>

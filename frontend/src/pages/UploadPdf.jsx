@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { pdfAPI, topicAPI } from '../api'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { Upload, AlertCircle, CheckCircle, Loader } from 'lucide-react'
+import { Upload, AlertCircle, CheckCircle, Loader, ArrowLeft } from 'lucide-react'
 
 export const UploadPdf = () => {
   const [file, setFile] = useState(null)
@@ -75,6 +75,9 @@ export const UploadPdf = () => {
 
   return (
     <div className="flex items-center justify-center px-4 py-12">
+      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+      </button>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
