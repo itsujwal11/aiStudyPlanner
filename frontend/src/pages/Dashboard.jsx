@@ -49,7 +49,7 @@ function AdminDashboard() {
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
       <motion.div variants={item}>
-        <h1 className="text-[40px] font-semibold text-on-surface leading-[48px]">Admin Dashboard</h1>
+        <h1 className="text-2xl md:text-[40px] font-semibold text-on-surface leading-[48px]">Admin Dashboard</h1>
         <p className="text-lg text-on-surface-variant/70 mt-1">System overview and management</p>
       </motion.div>
 
@@ -138,7 +138,7 @@ export const Dashboard = () => {
       )}
 
       <motion.div variants={item}>
-        <h1 className="text-[40px] font-semibold text-on-surface leading-[48px]">
+        <h1 className="text-2xl md:text-[40px] font-semibold text-on-surface leading-[48px]">
           Welcome back, {user?.name?.split(' ')[0] || 'Student'}
         </h1>
         <p className="text-lg text-on-surface-variant/70 mt-1">Here's your study overview</p>

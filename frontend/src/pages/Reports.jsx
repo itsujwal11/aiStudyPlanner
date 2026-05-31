@@ -116,7 +116,7 @@ export const Reports = () => {
     <div className="max-w-5xl">
       <div className="flex items-center gap-3 mb-8">
         <FileText className="w-8 h-8 text-primary" />
-        <h1 className="text-4xl text-on-surface font-bold">Study Report</h1>
+        <h1 className="text-2xl md:text-4xl text-on-surface font-bold">Study Report</h1>
       </div>
 
       {error && (

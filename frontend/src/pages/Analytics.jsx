@@ -49,7 +49,7 @@ export const Analytics = () => {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      <h1 className="text-4xl font-bold text-on-surface mb-0">Analytics & Insights</h1>
+      <h1 className="text-2xl md:text-4xl font-bold text-on-surface mb-0">Analytics & Insights</h1>
 
       {error && (
         <motion.div variants={item} className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6">
