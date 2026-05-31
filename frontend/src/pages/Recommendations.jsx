@@ -2,17 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { recommendationAPI } from '../api'
 import { Lightbulb, Calendar, Zap, AlertCircle, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } },
-}
-
-const item = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-}
 
 export const Recommendations = () => {
   const [nextTopics, setNextTopics] = useState([])
@@ -57,20 +46,20 @@ export const Recommendations = () => {
   }
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+    <div className="space-y-6">
         <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
         </button>
-        <motion.h1 className="text-2xl md:text-4xl text-on-surface font-bold mb-0" variants={item}>Study Recommendations</motion.h1>
+        <h1 className="text-2xl md:text-4xl text-on-surface font-bold mb-0">Study Recommendations</h1>
 
         {error && (
-          <motion.div className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6" variants={item}>
+          <div className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <p>{error}</p>
-          </motion.div>
+          </div>
         )}
 
-        <motion.div className="grid grid-cols-1 lg:grid-cols-3 gap-8" variants={item}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             <div className="glass-pane rounded-xl p-6 border border-black/8">
               <h2 className="text-2xl text-on-surface font-bold mb-6 flex items-center gap-2">
@@ -158,9 +147,9 @@ export const Recommendations = () => {
               </div>
             )}
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div className="mt-8 glass-pane rounded-xl p-6 border border-black/8" variants={item}>
+        <div className="mt-8 glass-pane rounded-xl p-6 border border-black/8">
           <h2 className="text-2xl text-on-surface font-bold mb-6 flex items-center gap-2">
             <Calendar className="w-6 h-6 text-primary" />
             Suggested Study Schedule
@@ -201,7 +190,7 @@ export const Recommendations = () => {
               </tbody>
             </table>
           </div>
-        </motion.div>
-    </motion.div>
+        </div>
+    </div>
   )
 }

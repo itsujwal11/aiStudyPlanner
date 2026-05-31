@@ -98,7 +98,7 @@ export const Planner = () => {
     return (
       <div className="flex items-center justify-center min-h-[60vh] px-4">
         <div className="glass-pane rounded-xl p-8 max-w-md text-center">
-          <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary transition-colors text-sm">
             <ArrowLeft className="w-4 h-4" /> Back to Dashboard
           </button>
           <Target className="w-16 h-16 text-primary mx-auto mb-4" />
@@ -116,18 +116,18 @@ export const Planner = () => {
   const totalTasksToday = planner.todayTasks?.length || 0
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show">
+    <motion.div variants={container} initial={false} animate="show" className="space-y-8">
       <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
         <ArrowLeft className="w-4 h-4" /> Back to Dashboard
       </button>
       {error && (
-        <motion.div variants={item} className="glass-pane rounded-xl p-4 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6">
+        <motion.div variants={item} className="glass-pane rounded-xl p-4 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <p>{error}</p>
         </motion.div>
       )}
 
-      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="glass-pane rounded-xl p-5 border border-black/8 hover:bg-white/85 transition">
           <div className="flex items-start justify-between">
             <div>

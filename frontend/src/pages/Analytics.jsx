@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
 import { analyticsAPI } from '../api'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { TrendingUp, Target, Zap, Clock, AlertCircle, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
-const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
 
 export const Analytics = () => {
   const [analytics, setAnalytics] = useState(null)
@@ -38,7 +34,7 @@ export const Analytics = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-2 border-primary border-t-transparent mx-auto mb-4"></div>
           <p className="text-on-surface-variant/70">Loading analytics...</p>
@@ -50,21 +46,21 @@ export const Analytics = () => {
   const COLORS = ['#06b6d4', '#0ea5e9', '#3b82f6', '#8b5cf6', '#ec4899']
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+    <div className="space-y-6">
       <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
         <ArrowLeft className="w-4 h-4" /> Back to Dashboard
       </button>
       <h1 className="text-2xl md:text-4xl font-bold text-on-surface mb-0">Analytics & Insights</h1>
 
       {error && (
-        <motion.div variants={item} className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6">
+        <div className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <p>{error}</p>
-        </motion.div>
+        </div>
       )}
 
       {/* Key Metrics */}
-      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="glass-pane rounded-xl p-5 border border-black/8">
           <div className="flex items-center justify-between">
             <div>
@@ -104,12 +100,12 @@ export const Analytics = () => {
             <Clock className="w-8 h-8 text-orange-500/30" />
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* Difficulty Distribution */}
-        <motion.div variants={item} className="glass-pane rounded-xl p-6 border border-black/8">
+        <div className="glass-pane rounded-xl p-6 border border-black/8">
           <h2 className="text-xl font-bold text-on-surface mb-6">Performance by Difficulty</h2>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={Object.entries(analytics?.byDifficulty || {}).map(([key, value]) => ({
@@ -126,10 +122,10 @@ export const Analytics = () => {
               <Bar dataKey="attempts" fill="#0ea5e9" name="Attempts" />
             </BarChart>
           </ResponsiveContainer>
-        </motion.div>
+        </div>
 
         {/* Trend */}
-        <motion.div variants={item} className="glass-pane rounded-xl p-6 border border-black/8">
+        <div className="glass-pane rounded-xl p-6 border border-black/8">
           <h2 className="text-xl font-bold text-on-surface mb-6">7-Day Trend</h2>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={analytics?.trend || []}>
@@ -141,11 +137,11 @@ export const Analytics = () => {
               <Line type="monotone" dataKey="accuracy" stroke="#06b6d4" name="Accuracy %" />
             </LineChart>
           </ResponsiveContainer>
-        </motion.div>
+        </div>
       </div>
 
       {/* Topic Comparison */}
-      <motion.div variants={item} className="glass-pane rounded-xl p-6 border border-black/8">
+      <div className="glass-pane rounded-xl p-6 border border-black/8">
         <h2 className="text-xl font-bold text-on-surface mb-6">Topic Performance Comparison</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -179,7 +175,7 @@ export const Analytics = () => {
             </tbody>
           </table>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }

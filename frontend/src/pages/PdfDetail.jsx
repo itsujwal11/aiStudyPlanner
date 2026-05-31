@@ -5,9 +5,6 @@ import { motion } from 'framer-motion'
 import { useCountUp } from '../hooks/useCountUp'
 import { BookOpen, Target, TrendingUp, Zap, ArrowLeft, Brain, ClipboardList, BarChart3, CheckCircle, XCircle } from 'lucide-react'
 
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
-const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }
-
 function StatCard({ icon: Icon, label, value, color = 'text-primary' }) {
   const count = useCountUp(value, 800)
   return (
@@ -42,7 +39,7 @@ export const PdfDetail = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent mx-auto mb-4" />
       </div>
     )
@@ -50,7 +47,7 @@ export const PdfDetail = () => {
 
   if (error || !detail) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <p className="text-on-surface-variant">{error || 'PDF not found'}</p>
           <button onClick={() => navigate('/dashboard')} className="btn-glass-primary mt-4">
@@ -62,8 +59,8 @@ export const PdfDetail = () => {
   }
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
-      <motion.div variants={item}>
+    <div className="space-y-8">
+      <div>
         <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
         </button>
@@ -71,26 +68,26 @@ export const PdfDetail = () => {
         <p className="text-lg text-on-surface-variant/70 mt-1">
           Exam: {new Date(detail.examDate).toLocaleDateString()} &middot; {detail.isAnalyzed ? 'Analyzed' : 'Not analyzed'}
         </p>
-      </motion.div>
+      </div>
 
-      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard icon={BookOpen} label="Topics" value={detail.totalTopics || 0} color="text-primary" />
         <StatCard icon={ClipboardList} label="Quizzes" value={detail.totalQuizzes || 0} color="text-violet-600" />
         <StatCard icon={TrendingUp} label="Avg Score" value={Math.round(detail.averageScore || 0)} color="text-emerald-600" />
         <StatCard icon={Target} label="Completion" value={Math.round(detail.overallCompletionPercentage || 0)} color="text-cyan-600" />
         <StatCard icon={Zap} label="Days Left" value={detail.daysUntilExam || 0} color="text-orange-600" />
-      </motion.div>
+      </div>
 
-      <motion.div variants={item} className="flex gap-4">
+      <div className="flex gap-4">
         <button onClick={() => navigate(`/study/${pdfId}`)} className="btn-glass-primary">
           <BookOpen className="w-4 h-4" /> Study This PDF
         </button>
         <button onClick={() => navigate('/study')} className="btn-glass-secondary">
           <BarChart3 className="w-4 h-4" /> Study All
         </button>
-      </motion.div>
+      </div>
 
-      <motion.div variants={item}>
+      <div>
         <div className="glass-pane rounded-xl p-6 border border-black/8">
           <h2 className="text-2xl font-semibold text-on-surface mb-5 flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
@@ -188,7 +185,7 @@ export const PdfDetail = () => {
             )}
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }

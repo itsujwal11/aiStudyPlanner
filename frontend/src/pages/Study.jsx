@@ -7,6 +7,9 @@ import confetti from 'canvas-confetti'
 import toast from 'react-hot-toast'
 import { BookOpen, AlertCircle, CheckCircle, XCircle, ArrowRight, BarChart3, ArrowLeft } from 'lucide-react'
 
+const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
+const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
+
 export const Study = () => {
   const { pdfId } = useParams()
   const [topics, setTopics] = useState([])
@@ -110,7 +113,7 @@ export const Study = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center animate-fade-in">
           <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent mx-auto mb-4" />
           <p className="text-on-surface-variant">Loading your study session...</p>
@@ -121,7 +124,7 @@ export const Study = () => {
 
   if (allQuizzes.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="glass-pane rounded-xl p-8 border border-black/8 max-w-md text-center animate-fade-in">
           <AlertCircle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-on-surface mb-2">No Quizzes Available</h2>
@@ -139,7 +142,7 @@ export const Study = () => {
 
   if (sessionComplete) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center max-w-md">
           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}>
             <CheckCircle className="w-20 h-20 text-emerald-500 mx-auto mb-4" />
@@ -169,19 +172,21 @@ export const Study = () => {
   }
 
   return (
-    <>
+    <motion.div variants={container} initial={false} animate="show" className="space-y-6">
       {/* Error */}
       {error && (
-        <div className="glass-pane rounded-xl p-4 border border-black/8 mb-6 flex items-center gap-3 bg-red-50/80 border border-red-200/50">
+        <motion.div variants={item} className="glass-pane rounded-xl p-4 border border-black/8 flex items-center gap-3 bg-red-50/80 border border-red-200/50">
           <AlertCircle className="w-5 h-5 text-red-700 flex-shrink-0" />
           <p className="text-red-700 text-sm">{error}</p>
-        </div>
+        </motion.div>
       )}
 
-      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm"><ArrowLeft className="w-4 h-4" /> Back to Dashboard</button>
+      <motion.div variants={item}>
+        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary transition-colors text-sm"><ArrowLeft className="w-4 h-4" /> Back to Dashboard</button>
+      </motion.div>
 
       {/* Header */}
-      <div className="glass-pane rounded-xl p-6 border border-black/8 mb-6">
+      <motion.div variants={item} className="glass-pane rounded-xl p-6 border border-black/8">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-xl font-bold text-on-surface">Study Session</h1>
@@ -200,7 +205,7 @@ export const Study = () => {
             transition={{ duration: 0.4 }}
           />
         </div>
-      </div>
+      </motion.div>
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -408,6 +413,6 @@ export const Study = () => {
           </AnimatePresence>
         </div>
       </div>
-    </>
+    </motion.div>
   )
 }
