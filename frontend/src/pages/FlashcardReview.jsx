@@ -52,7 +52,7 @@ export const FlashcardReview = () => {
           <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-6"><Brain className="w-10 h-10 text-emerald-600" /></div>
           <h2 className="text-2xl font-bold text-on-surface mb-2">Review Complete!</h2>
           <div className="glass-pane rounded-xl p-6 border border-black/8 mt-6">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
               <div><p className="text-sm text-on-surface-variant/70">Reviewed</p><p className="text-2xl font-bold text-on-surface">{stats.reviewed}</p></div>
               <div><p className="text-sm text-on-surface-variant/70">Remembered</p><p className="text-2xl font-bold text-emerald-600">{stats.remembered}</p></div>
               <div><p className="text-sm text-on-surface-variant/70">Accuracy</p><p className="text-2xl font-bold text-primary">{accuracy}%</p></div>

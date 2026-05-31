@@ -132,7 +132,7 @@ export const Reports = () => {
             initial="hidden"
             animate="visible"
           >
-            <motion.div variants={itemVariants} className="mb-8 flex gap-3">
+            <motion.div variants={itemVariants} className="mb-8 flex flex-wrap gap-3">
               <button
                 onClick={exportAsJSON}
                 disabled={exporting}
