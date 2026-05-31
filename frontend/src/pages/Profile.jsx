@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { motion } from 'framer-motion'
-import { Settings, Save, AlertCircle } from 'lucide-react'
+import { Settings, Save, AlertCircle, ArrowLeft } from 'lucide-react'
 
 export const Profile = () => {
   const { user } = useAuth()
@@ -56,6 +56,9 @@ export const Profile = () => {
 
   return (
     <div className="max-w-2xl">
+      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+      </button>
       <div className="flex items-center gap-3 mb-8">
         <Settings className="w-8 h-8 text-primary" />
         <h1 className="text-2xl md:text-4xl text-on-surface font-bold">Profile Settings</h1>

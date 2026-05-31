@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { recommendationAPI } from '../api'
-import { Lightbulb, Calendar, Zap, AlertCircle } from 'lucide-react'
+import { Lightbulb, Calendar, Zap, AlertCircle, ArrowLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
 const container = {
@@ -19,6 +20,7 @@ export const Recommendations = () => {
   const [schedule, setSchedule] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const navigate = useNavigate()
 
   useEffect(() => {
     fetchRecommendations()
@@ -56,6 +58,9 @@ export const Recommendations = () => {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+        </button>
         <motion.h1 className="text-2xl md:text-4xl text-on-surface font-bold mb-0" variants={item}>Study Recommendations</motion.h1>
 
         {error && (

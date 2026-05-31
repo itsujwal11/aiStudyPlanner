@@ -4,7 +4,7 @@ import { plannerAPI } from '../api'
 import {
   ListChecks, Target, TrendingUp, Calendar, Clock, AlertTriangle,
   CheckCircle, XCircle, BookOpen, Zap, BarChart3, ArrowRight,
-  BrainCircuit, CalendarDays, GraduationCap, Lightbulb, ChevronRight
+  BrainCircuit, CalendarDays, GraduationCap, Lightbulb, ChevronRight, ArrowLeft
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -98,6 +98,9 @@ export const Planner = () => {
     return (
       <div className="flex items-center justify-center min-h-[60vh] px-4">
         <div className="glass-pane rounded-xl p-8 max-w-md text-center">
+          <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+          </button>
           <Target className="w-16 h-16 text-primary mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-on-surface mb-2">No Study Plan Yet</h2>
           <p className="text-on-surface-variant/70 mb-6">Upload a PDF and analyze it to generate your personalized study planner.</p>
@@ -114,6 +117,9 @@ export const Planner = () => {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show">
+      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+      </button>
       {error && (
         <motion.div variants={item} className="glass-pane rounded-xl p-4 bg-red-50/80 border border-red-200/50 text-red-700 flex items-center gap-3 mb-6">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />

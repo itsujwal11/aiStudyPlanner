@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { flashcardAPI } from '../api'
-import { Brain, RotateCcw, ThumbsUp, ThumbsDown, ChevronRight, BookOpen } from 'lucide-react'
+import { Brain, RotateCcw, ThumbsUp, ThumbsDown, ChevronRight, BookOpen, ArrowLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 export const FlashcardReview = () => {
   const [cards, setCards] = useState([])
@@ -10,6 +11,7 @@ export const FlashcardReview = () => {
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
   const [stats, setStats] = useState({ reviewed: 0, remembered: 0 })
+  const navigate = useNavigate()
 
   useEffect(() => { fetchDueCards() }, [])
 
@@ -70,6 +72,9 @@ export const FlashcardReview = () => {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
+      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+      </button>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-on-surface">Flashcard Review</h1>
         <span className="text-sm text-on-surface-variant/70">{index + 1} / {cards.length}</span>

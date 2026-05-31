@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { reportAPI } from '../api'
-import { Download, FileText, AlertCircle } from 'lucide-react'
+import { Download, FileText, AlertCircle, ArrowLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -27,6 +28,7 @@ export const Reports = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     fetchReport()
@@ -114,6 +116,9 @@ export const Reports = () => {
 
   return (
     <div className="max-w-5xl">
+      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-on-surface-variant/70 hover:text-primary mb-4 transition-colors text-sm">
+        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+      </button>
       <div className="flex items-center gap-3 mb-8">
         <FileText className="w-8 h-8 text-primary" />
         <h1 className="text-2xl md:text-4xl text-on-surface font-bold">Study Report</h1>
