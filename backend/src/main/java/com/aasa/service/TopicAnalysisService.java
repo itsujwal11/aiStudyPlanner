@@ -7,6 +7,7 @@ import com.aasa.entity.Topic;
 import com.aasa.repository.TopicRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -146,6 +147,7 @@ public class TopicAnalysisService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public List<TopicDto> getUserTopicsRankedByPriority(Long userId) {
         logger.info("Fetching ranked topics for user ID: " + userId);
         return topicRepository.findByUserIdOrderByPriority(userId)
