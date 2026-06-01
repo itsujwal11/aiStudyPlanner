@@ -7,6 +7,7 @@ import com.aasa.entity.Topic;
 import com.aasa.repository.QuizRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
@@ -205,6 +206,7 @@ public class QuizEngineService {
         };
     }
 
+    @Transactional(readOnly = true)
     public List<QuizDto> getQuizzesByTopic(Long topicId) {
         logger.info("Fetching quizzes for topic ID: " + topicId);
         return quizRepository.findByTopicId(topicId)
