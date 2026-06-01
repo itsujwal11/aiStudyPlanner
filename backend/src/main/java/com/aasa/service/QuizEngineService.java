@@ -215,6 +215,7 @@ public class QuizEngineService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public Quiz getQuizById(Long quizId) {
         return quizRepository.findById(quizId)
                 .orElseThrow(() -> new RuntimeException("Quiz not found with ID: " + quizId));
