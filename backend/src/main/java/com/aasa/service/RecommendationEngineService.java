@@ -35,7 +35,7 @@ public class RecommendationEngineService {
     @Autowired
     private WeaknessEngineService weaknessEngineService;
 
-    public List<Topic> getRecommendedTopics(User user, int limit) {
+    public List<Map<String, Object>> getRecommendedTopics(User user, int limit) {
         List<StudyProgress> allProgress = studyProgressRepository.findByUserId(user.getId());
 
         return allProgress.stream()
@@ -45,7 +45,15 @@ public class RecommendationEngineService {
                     return scoreB.compareTo(scoreA);
                 })
                 .limit(limit)
-                .map(StudyProgress::getTopic)
+                .map(sp -> {
+                    Topic topic = sp.getTopic();
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", topic.getId());
+                    map.put("title", topic.getTitle());
+                    map.put("priority", topic.getPriorityScore());
+                    map.put("complexity", topic.getComplexityScore());
+                    return map;
+                })
                 .collect(Collectors.toList());
     }
 
