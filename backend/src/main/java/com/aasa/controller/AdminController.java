@@ -45,6 +45,7 @@ public class AdminController {
     }
 
     @GetMapping("/dashboard")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> dashboard(Authentication authentication) {
         try {
             checkAdmin(authentication);
@@ -61,6 +62,7 @@ public class AdminController {
     }
 
     @GetMapping("/entities")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> listEntities(Authentication authentication) {
         try {
             checkAdmin(authentication);
@@ -98,6 +100,7 @@ public class AdminController {
     }
 
     @GetMapping("/entities/{entityName}")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> listRecords(
             Authentication authentication,
             @PathVariable String entityName,
