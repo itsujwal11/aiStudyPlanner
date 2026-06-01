@@ -5,6 +5,7 @@ import com.aasa.entity.*;
 import com.aasa.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -13,6 +14,7 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional(readOnly = true)
 public class PlannerService {
 
     private static final Logger logger = Logger.getLogger(PlannerService.class.getName());
