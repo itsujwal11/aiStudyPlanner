@@ -52,6 +52,10 @@ public class PdfManagementService {
             String fileName = file.getOriginalFilename();
             logger.info("Uploading PDF: " + fileName + " for user: " + user.getId());
 
+            // Delete any existing PDFs/data for this user (one PDF per user)
+            deleteAllUserData(user);
+            logger.info("Existing data deleted for user: " + user.getId());
+
             String uniqueFileName = UUID.randomUUID() + "_" + fileName;
             String filePath = uploadDir + "/" + uniqueFileName;
 
