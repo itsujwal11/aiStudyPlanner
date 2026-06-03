@@ -16,9 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -45,6 +44,7 @@ public class QuizController {
     private QuizAttemptRepository quizAttemptRepository;
 
     @GetMapping("/topic/{topicId}")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<QuizDto>> getQuizzesByTopic(@PathVariable Long topicId) {
         try {
             logger.info("Fetching quizzes for topic ID: " + topicId);
@@ -58,6 +58,7 @@ public class QuizController {
     }
 
     @GetMapping("/{quizId}")
+    @Transactional(readOnly = true)
     public ResponseEntity<QuizDto> getQuiz(@PathVariable Long quizId) {
         try {
             logger.info("Fetching quiz ID: " + quizId);
@@ -70,6 +71,7 @@ public class QuizController {
     }
 
     @PostMapping("/{quizId}/submit")
+    @Transactional
     public ResponseEntity<QuizSubmissionResponse> submitQuiz(
             @PathVariable Long quizId,
             @RequestBody QuizSubmissionRequest request,

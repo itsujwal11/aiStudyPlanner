@@ -12,4 +12,6 @@ public interface TopicRepository extends JpaRepository<Topic, Long> {
 
     @Query("SELECT t FROM Topic t WHERE t.pdfDocument.user.id = ?1 ORDER BY t.priorityScore DESC")
     List<Topic> findByUserIdOrderByPriority(Long userId);
+
+    void deleteByPdfDocumentId(Long pdfId);
 }

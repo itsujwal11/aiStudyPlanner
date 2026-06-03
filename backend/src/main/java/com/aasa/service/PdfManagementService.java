@@ -52,6 +52,10 @@ public class PdfManagementService {
             String fileName = file.getOriginalFilename();
             logger.info("Uploading PDF: " + fileName + " for user: " + user.getId());
 
+            // Delete any existing PDFs/data for this user (one PDF per user)
+            deleteAllUserData(user);
+            logger.info("Existing data deleted for user: " + user.getId());
+
             String uniqueFileName = UUID.randomUUID() + "_" + fileName;
             String filePath = uploadDir + "/" + uniqueFileName;
 
@@ -221,6 +225,11 @@ public class PdfManagementService {
                 quizAttemptRepository.deleteByQuizTopicId(topic.getId());
             } catch (Exception e) {
                 logger.warning("Error deleting attempts for topic " + topic.getId() + ": " + e.getMessage());
+            }
+            try {
+                studyProgressRepository.deleteByTopicId(topic.getId());
+            } catch (Exception e) {
+                logger.warning("Error deleting study progress for topic " + topic.getId() + ": " + e.getMessage());
             }
             try {
                 quizRepository.deleteByTopicId(topic.getId());

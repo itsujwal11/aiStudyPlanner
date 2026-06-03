@@ -12,6 +12,7 @@ import com.aasa.repository.StudyProgressRepository;
 import com.aasa.repository.TopicRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -20,6 +21,7 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional(readOnly = true)
 public class StudyProgressService {
 
     private static final Logger logger = Logger.getLogger(StudyProgressService.class.getName());
@@ -64,6 +66,7 @@ public class StudyProgressService {
                 });
     }
 
+    @Transactional
     public void updateProgressAfterQuizAttempt(User user, Topic topic, QuizAttempt attempt) {
         logger.info("Updating progress after quiz attempt for user " + user.getId() + " and topic " + topic.getId());
 

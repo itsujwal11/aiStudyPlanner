@@ -10,7 +10,6 @@ export const Login = () => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [seeding, setSeeding] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
 
@@ -34,31 +33,6 @@ export const Login = () => {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleSeedAdmin = async () => {
-    setSeeding(true)
-    try {
-      await authAPI.seedAdmin()
-      setFormData({ email: 'admin@aasa.com', password: 'admin123' })
-      setError('')
-    } catch (err) {
-      const msg = err.response ? (typeof err.response.data === 'string' ? err.response.data : 'Seed failed') : 'Backend unreachable — ensure the backend is running on port 9096'
-      setFormData({ email: 'admin@aasa.com', password: 'admin123' })
-      setError(msg + ' (fields pre-filled, try signing in)')
-    } finally { setSeeding(false) }
-  }
-
-  const handleDemoMode = () => {
-    const demoUser = {
-      userId: 1,
-      email: 'demo@example.com',
-      name: 'Demo User',
-      role: 'USER',
-      token: 'demo-token-12345'
-    }
-    login(demoUser, demoUser.token)
-    navigate('/dashboard')
   }
 
   return (
@@ -143,21 +117,6 @@ export const Login = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleDemoMode}
-            className="w-full text-sm text-on-surface-variant/70 hover:text-primary transition-all py-2"
-          >
-            Continue with Demo Mode
-          </button>
-          <button
-            type="button"
-            onClick={handleSeedAdmin}
-            disabled={seeding}
-            className="w-full text-xs text-on-surface-variant/50 hover:text-primary transition-all pb-2 disabled:opacity-50"
-          >
-            {seeding ? 'Seeding admin...' : 'Seed admin account (admin@aasa.com)'}
-          </button>
         </form>
 
         <p className="text-center text-sm text-on-surface-variant/70 mt-6">

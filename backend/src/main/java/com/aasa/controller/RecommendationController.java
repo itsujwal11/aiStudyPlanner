@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
-
 @RestController
 @RequestMapping("/api/recommendations")
 @CrossOrigin(origins = "*", allowedHeaders = "*")
@@ -28,20 +27,7 @@ public class RecommendationController {
             @RequestParam(defaultValue = "5") int limit,
             Authentication authentication) {
         User user = authService.getUserByEmail(authentication.getName());
-        List<com.aasa.entity.Topic> topics = recommendationEngineService.getRecommendedTopics(user, limit);
-
-        List<Map<String, Object>> response = topics.stream()
-
-                .map(topic -> {
-                    Map<String, Object> map = new java.util.HashMap<>();
-                    map.put("id", topic.getId());
-                    map.put("title", topic.getTitle());
-                    map.put("priority", topic.getPriorityScore());
-                    map.put("complexity", topic.getComplexityScore());
-                    return map;
-                })
-                .collect(java.util.stream.Collectors.toList());
-
+        List<Map<String, Object>> response = recommendationEngineService.getRecommendedTopics(user, limit);
         return ResponseEntity.ok(response);
     }
 

@@ -7,6 +7,7 @@ import com.aasa.entity.Topic;
 import com.aasa.repository.TopicRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -31,11 +32,22 @@ public class TopicAnalysisService {
     @Autowired
     private QuizEngineService quizEngineService;
 
-    // @Autowired
-    // private FlashcardService flashcardService;
+    @Autowired
+    private com.aasa.repository.QuizRepository quizRepository;
 
+    @Transactional
     public List<Topic> analyzeAndCreateTopics(PdfDocument pdfDocument) throws Exception {
         logger.info("Analyzing PDF document: " + pdfDocument.getFileName());
+
+        // Delete existing topics/quizzes for this PDF to avoid duplicates
+        List<Topic> existing = topicRepository.findByPdfDocumentId(pdfDocument.getId());
+        if (!existing.isEmpty()) {
+            logger.info("Deleting " + existing.size() + " existing topics for PDF " + pdfDocument.getId());
+            for (Topic t : existing) {
+                quizRepository.deleteByTopicId(t.getId());
+            }
+            topicRepository.deleteByPdfDocumentId(pdfDocument.getId());
+        }
 
         AiAnalysisResponse aiResponse = geminiAiService.analyzeContent(pdfDocument.getExtractedText());
         logger.info("Received " + aiResponse.getTopics().size() + " topics from AI");
@@ -49,7 +61,6 @@ public class TopicAnalysisService {
         logger.info("Created " + topics.size() + " topic entities");
         List<Topic> savedTopics = topicRepository.saveAll(topics);
 
-        // Generate quizzes and flashcards for each topic
         for (int i = 0; i < savedTopics.size() && i < aiResponse.getTopics().size(); i++) {
             Topic topic = savedTopics.get(i);
             AiAnalysisResponse.TopicAnalysis analysis = aiResponse.getTopics().get(i);
@@ -67,13 +78,6 @@ public class TopicAnalysisService {
             } else {
                 logger.warning("No quizzes found for topic: " + topic.getTitle());
             }
-
-            // Generate flashcards for this topic (disabled)
-            // try {
-            //     generateFlashcardsForTopic(topic, analysis);
-            // } catch (Exception e) {
-            //     logger.warning("Error generating flashcards for topic " + topic.getTitle() + ": " + e.getMessage());
-            // }
         }
 
         return savedTopics;
@@ -138,6 +142,7 @@ public class TopicAnalysisService {
         return (0.6 * conceptWeight) + (0.4 * difficultyWeight);
     }
 
+    @Transactional(readOnly = true)
     public List<TopicDto> getTopicsByPdf(Long pdfId) {
         logger.info("Fetching topics for PDF ID: " + pdfId);
         return topicRepository.findByPdfDocumentId(pdfId)
@@ -146,6 +151,7 @@ public class TopicAnalysisService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public List<TopicDto> getUserTopicsRankedByPriority(Long userId) {
         logger.info("Fetching ranked topics for user ID: " + userId);
         return topicRepository.findByUserIdOrderByPriority(userId)

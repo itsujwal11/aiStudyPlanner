@@ -36,4 +36,6 @@ public interface StudyProgressRepository extends JpaRepository<StudyProgress, Lo
     List<StudyProgress> findDueForReview(Long userId, LocalDate date);
 
     void deleteByUserId(Long userId);
+
+    void deleteByTopicId(Long topicId);
 }
