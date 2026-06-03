@@ -227,6 +227,11 @@ public class PdfManagementService {
                 logger.warning("Error deleting attempts for topic " + topic.getId() + ": " + e.getMessage());
             }
             try {
+                studyProgressRepository.deleteByTopicId(topic.getId());
+            } catch (Exception e) {
+                logger.warning("Error deleting study progress for topic " + topic.getId() + ": " + e.getMessage());
+            }
+            try {
                 quizRepository.deleteByTopicId(topic.getId());
             } catch (Exception e) {
                 logger.warning("Error deleting quizzes for topic " + topic.getId() + ": " + e.getMessage());
