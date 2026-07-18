@@ -86,7 +86,10 @@ export const UploadPdf = () => {
         <div className="glass-pane rounded-xl p-8 border border-black/8">
           <div className="mb-6">
             <h1 className="text-xl md:text-2xl font-bold text-on-surface">Upload Study Material</h1>
-            <p className="text-sm text-on-surface-variant/70 mt-1">Upload a PDF to start learning</p>
+            <p className="text-sm text-on-surface-variant/70 mt-1">
+              Upload one PDF to start learning. A new upload replaces your previous
+              material and resets its scores and progress.
+            </p>
           </div>
 
           {error && (

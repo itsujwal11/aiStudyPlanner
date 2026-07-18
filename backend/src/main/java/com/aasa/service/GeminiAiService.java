@@ -128,11 +128,26 @@ public class GeminiAiService {
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw e;
+                throw new Exception("Request was interrupted", e);
+            } catch (java.io.IOException e) {
+                // Network errors (connection refused, timeout, DNS failure, etc.)
+                retries++;
+                if (retries >= MAX_RETRIES) {
+                    logger.severe("Network error after " + retries + " retries: " + e.getMessage());
+                    throw new Exception("Network error: " + e.getMessage() + " (after " + retries + " retries)", e);
+                }
+                long waitMs = (long) Math.pow(2, retries) * 3000;
+                logger.warning("Network error (attempt " + retries + "/" + MAX_RETRIES + "): " + e.getMessage() + ", retrying in " + waitMs + "ms");
+                try {
+                    Thread.sleep(waitMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new Exception("Request was interrupted during retry wait", ie);
+                }
             }
         }
 
-        throw new Exception("Exhausted retries for rate limiting");
+        throw new Exception("Exhausted all retries for Gemini API call");
     }
 
     private String extractTextFromResponse(String responseBody) throws Exception {

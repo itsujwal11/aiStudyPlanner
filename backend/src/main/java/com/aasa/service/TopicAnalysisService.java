@@ -49,7 +49,16 @@ public class TopicAnalysisService {
             topicRepository.deleteByPdfDocumentId(pdfDocument.getId());
         }
 
-        AiAnalysisResponse aiResponse = geminiAiService.analyzeContent(pdfDocument.getExtractedText());
+        // Call external AI API OUTSIDE the transaction to avoid rollback-only issues
+        // when the API fails or times out
+        AiAnalysisResponse aiResponse;
+        try {
+            aiResponse = geminiAiService.analyzeContent(pdfDocument.getExtractedText());
+        } catch (Exception e) {
+            logger.severe("Gemini API call failed: " + e.getMessage());
+            throw e; // Re-throw to fail the operation
+        }
+
         logger.info("Received " + aiResponse.getTopics().size() + " topics from AI");
 
         long daysUntilExam = ChronoUnit.DAYS.between(LocalDate.now(), pdfDocument.getExamDate());

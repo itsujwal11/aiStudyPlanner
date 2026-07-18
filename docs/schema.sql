@@ -4,6 +4,9 @@ CREATE DATABASE aasa_db;
 -- Connect to the database
 \c aasa_db;
 
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Users table
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
@@ -80,6 +83,18 @@ CREATE TABLE study_progress (
     UNIQUE(user_id, topic_id)
 );
 
+-- Document Chunks table (for RAG)
+CREATE TABLE document_chunks (
+    id BIGSERIAL PRIMARY KEY,
+    pdf_id BIGINT NOT NULL REFERENCES pdf_documents(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    chunk_text TEXT NOT NULL,
+    embedding vector(768),
+    token_count INTEGER,
+    page_number INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better query performance
 CREATE INDEX idx_pdf_user ON pdf_documents(user_id);
 CREATE INDEX idx_topic_pdf ON topics(pdf_id);
@@ -89,3 +104,7 @@ CREATE INDEX idx_attempt_quiz ON quiz_attempts(quiz_id);
 CREATE INDEX idx_progress_user ON study_progress(user_id);
 CREATE INDEX idx_progress_topic ON study_progress(topic_id);
 CREATE INDEX idx_user_email ON users(email);
+CREATE INDEX idx_chunk_pdf ON document_chunks(pdf_id);
+CREATE INDEX idx_chunk_embedding ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE UNIQUE INDEX uq_document_chunks_pdf_chunk_index
+    ON document_chunks(pdf_id, chunk_index);

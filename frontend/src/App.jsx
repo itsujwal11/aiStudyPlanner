@@ -16,6 +16,7 @@ import { Profile } from './pages/Profile'
 import { Reports } from './pages/Reports'
 import { Planner } from './pages/Planner'
 import { Admin } from './pages/Admin'
+import { AiChat } from './pages/AiChat'
 import './index.css'
 
 function PageLayout({ children }) {
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/profile" element={<ProtectedRoute><PageLayout><Profile /></PageLayout></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><PageLayout><Reports /></PageLayout></ProtectedRoute>} />
       <Route path="/planner" element={<ProtectedRoute><PageLayout><Planner /></PageLayout></ProtectedRoute>} />
+      <Route path="/ai-chat" element={<ProtectedRoute><PageLayout><AiChat /></PageLayout></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute><PageLayout><Admin /></PageLayout></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
     </Routes>

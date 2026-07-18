@@ -32,7 +32,7 @@ public class ScoringEngineService {
     }
 
     public Double calculatePriorityScore(Double complexity, Double importance,
-                                        Double weaknessLevel, Integer daysUntilExam) {
+     Double weaknessLevel, Integer daysUntilExam) {
         if (complexity == null || importance == null || weaknessLevel == null) {
             return 0.0;
         }

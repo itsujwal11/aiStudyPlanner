@@ -105,6 +105,11 @@ export const reportAPI = {
   generateStudyReport: () => api.get('/reports/study-report'),
 };
 
+export const ragAPI = {
+  askQuestion: (data) => api.post('/rag/ask', data),
+  reprocessPdf: (pdfId) => api.post(`/rag/reprocess/${pdfId}`),
+};
+
 export const adminAPI = {
   dashboard: () => api.get('/admin/dashboard'),
   listEntities: () => api.get('/admin/entities'),

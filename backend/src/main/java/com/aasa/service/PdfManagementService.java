@@ -5,16 +5,20 @@ import com.aasa.entity.PdfDocument;
 import com.aasa.entity.Topic;
 import com.aasa.entity.User;
 import com.aasa.repository.*;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -32,6 +36,9 @@ public class PdfManagementService {
     private PdfExtractionService pdfExtractionService;
 
     @Autowired
+    private RagAugmentedService ragAugmentedService;
+
+    @Autowired
     private TopicRepository topicRepository;
 
     @Autowired
@@ -43,24 +50,33 @@ public class PdfManagementService {
     @Autowired
     private StudyProgressRepository studyProgressRepository;
 
+    @Autowired
+    private DocumentChunkRepository documentChunkRepository;
+
+    @Autowired
+    private ReviewLogRepository reviewLogRepository;
+
+    private final TransactionTemplate transactionTemplate;
+
+    public PdfManagementService(PlatformTransactionManager transactionManager) {
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
+
     @Value("${file.upload.dir}")
     private String uploadDir;
 
-    @Transactional
     public PdfDocumentDto uploadPdf(MultipartFile file, User user, LocalDate examDate) {
+        java.nio.file.Path newFilePath = null;
         try {
             String fileName = file.getOriginalFilename();
             logger.info("Uploading PDF: " + fileName + " for user: " + user.getId());
 
-            // Delete any existing PDFs/data for this user (one PDF per user)
-            deleteAllUserData(user);
-            logger.info("Existing data deleted for user: " + user.getId());
-
             String uniqueFileName = UUID.randomUUID() + "_" + fileName;
             String filePath = uploadDir + "/" + uniqueFileName;
+            newFilePath = Paths.get(filePath);
 
             Files.createDirectories(Paths.get(uploadDir));
-            Files.write(Paths.get(filePath), file.getBytes());
+            Files.write(newFilePath, file.getBytes());
 
             String extractedText = pdfExtractionService.extractTextFromPdf(file);
 
@@ -73,8 +89,35 @@ public class PdfManagementService {
                     .isAnalyzed(false)
                     .build();
 
-            PdfDocument saved = pdfDocumentRepository.save(pdfDocument);
+            // Commit the database replacement before optional RAG processing.
+            // A caught RAG persistence error must not mark the upload rollback-only.
+            List<String> obsoleteFilePaths = new ArrayList<>();
+            PdfDocument saved = transactionTemplate.execute(status -> {
+                obsoleteFilePaths.addAll(deleteAllUserData(user));
+                logger.info("Existing data deleted for user: " + user.getId());
+                return pdfDocumentRepository.saveAndFlush(pdfDocument);
+            });
+
+            if (saved == null) {
+                throw new IllegalStateException("PDF database transaction returned no saved document");
+            }
+            deleteFilesBestEffort(obsoleteFilePaths);
             logger.info("PDF saved with ID: " + saved.getId());
+
+            // Process PDF for RAG (chunk + embed) asynchronously
+            // Note: We call this outside the transaction to avoid rollback-only issues
+            // when external API calls (embeddings) fail
+            try {
+                ragAugmentedService.processPdfForRag(saved);
+                logger.info("RAG chunking completed for PDF: " + saved.getId());
+
+                // Generate embeddings in a separate transaction (outside the upload transaction)
+                ragAugmentedService.generateEmbeddingsForChunks(saved);
+                logger.info("RAG embedding completed for PDF: " + saved.getId());
+            } catch (Exception e) {
+                logger.warning("RAG processing failed for PDF " + saved.getId() + ": " + e.getMessage());
+                // Don't fail the upload if RAG processing fails
+            }
 
             return PdfDocumentDto.builder()
                     .id(saved.getId())
@@ -85,15 +128,30 @@ public class PdfManagementService {
                     .topicCount(0)
                     .build();
         } catch (IOException e) {
+            deleteIncompleteUpload(newFilePath);
             logger.severe("IO Error during PDF upload: " + e.getMessage());
             throw new RuntimeException("Failed to process PDF file: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            deleteIncompleteUpload(newFilePath);
+            throw e;
         }
     }
 
-    @Transactional
-    public void deleteAllUserData(User user) {
+    public void resetAllUserData(User user) {
+        List<String> deletedFilePaths =
+                transactionTemplate.execute(status -> deleteAllUserData(user));
+        if (deletedFilePaths != null) {
+            deleteFilesBestEffort(deletedFilePaths);
+        }
+    }
+
+    private List<String> deleteAllUserData(User user) {
         Long userId = user.getId();
         logger.info("Deleting all data for user ID: " + userId);
+        List<String> deletedFilePaths = new ArrayList<>();
+
+        reviewLogRepository.deleteByUserId(userId);
+        logger.info("Deleted review logs for user: " + userId);
 
         // Delete in correct FK order: quiz_attempts → study_progress → quizzes → topics → pdf_documents
         quizAttemptRepository.deleteByUserId(userId);
@@ -105,25 +163,51 @@ public class PdfManagementService {
         // Get all topics for user, delete quizzes for each topic first
         List<Topic> topics = topicRepository.findByUserIdOrderByPriority(userId);
         for (Topic topic : topics) {
-            try {
-                quizRepository.deleteByTopicId(topic.getId());
-            } catch (Exception e) {
-                logger.warning("Error deleting quizzes for topic " + topic.getId() + ": " + e.getMessage());
-            }
+            quizRepository.deleteByTopicId(topic.getId());
         }
         logger.info("Deleted quizzes for all topics");
 
-        // Now delete PDFs (cascade will handle topics)
+        // Delete RAG chunks
         List<PdfDocument> pdfs = pdfDocumentRepository.findByUserId(userId);
         for (PdfDocument pdf : pdfs) {
-            try {
-                Files.deleteIfExists(Paths.get(pdf.getFilePath()));
-            } catch (IOException e) {
-                logger.warning("Failed to delete file: " + pdf.getFilePath());
-            }
+            documentChunkRepository.deleteByPdfDocumentId(pdf.getId());
+        }
+
+        // Flush dependent deletes before deleting their parent PDFs.
+        pdfDocumentRepository.flush();
+
+        // Now delete PDFs (cascade will handle topics)
+        for (PdfDocument pdf : pdfs) {
+            deletedFilePaths.add(pdf.getFilePath());
             pdfDocumentRepository.delete(pdf);
         }
+        pdfDocumentRepository.flush();
         logger.info("Deleted all PDFs for user: " + userId);
+        return deletedFilePaths;
+    }
+
+    private void deleteIncompleteUpload(java.nio.file.Path filePath) {
+        if (filePath == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(filePath);
+        } catch (IOException cleanupError) {
+            logger.warning("Failed to remove incomplete upload file: " + filePath);
+        }
+    }
+
+    private void deleteFilesBestEffort(List<String> filePaths) {
+        for (String filePath : filePaths) {
+            try {
+                Files.deleteIfExists(Paths.get(filePath));
+            } catch (IOException | RuntimeException e) {
+                logger.warning(
+                        "Database cleanup committed, but file could not be removed: "
+                                + filePath + " (" + e.getMessage() + ")"
+                );
+            }
+        }
     }
 
     @Transactional(readOnly = true)
@@ -139,8 +223,9 @@ public class PdfManagementService {
                 .orElseThrow(() -> new RuntimeException("PDF not found"));
     }
 
-    public PdfDocumentDto getPdfByIdDto(Long pdfId) {
-        PdfDocument pdf = getPdfById(pdfId);
+    @Transactional(readOnly = true)
+    public PdfDocumentDto getPdfByIdDto(Long pdfId, Long userId) {
+        PdfDocument pdf = getOwnedPdfById(pdfId, userId);
         int topicCount = topicRepository.findByPdfDocumentId(pdfId).size();
         return PdfDocumentDto.builder()
                 .id(pdf.getId())
@@ -154,8 +239,7 @@ public class PdfManagementService {
 
     @Transactional(readOnly = true)
     public com.aasa.dto.PdfDetailDto getPdfDetail(Long pdfId, Long userId) {
-        PdfDocument pdf = pdfDocumentRepository.findById(pdfId)
-                .orElseThrow(() -> new RuntimeException("PDF not found"));
+        PdfDocument pdf = getOwnedPdfById(pdfId, userId);
 
         List<Topic> pdfTopics = topicRepository.findByPdfDocumentId(pdfId);
         int totalTopics = pdfTopics.size();
@@ -215,34 +299,52 @@ public class PdfManagementService {
                 .build();
     }
 
-    @Transactional
-    public void deletePdf(Long pdfId) {
-        PdfDocument pdf = getPdfById(pdfId);
-        // Delete related data first
+    private PdfDocument getOwnedPdfById(Long pdfId, Long userId) {
+        return pdfDocumentRepository.findByIdAndUserId(pdfId, userId)
+                .orElseThrow(() -> new EntityNotFoundException("PDF not found"));
+    }
+
+    public void deletePdf(Long pdfId, Long userId) {
+        String filePath = transactionTemplate.execute(status -> deletePdfData(pdfId, userId));
+        if (filePath == null) {
+            throw new IllegalStateException("PDF delete transaction returned no file path");
+        }
+
+        // The database is the source of truth. A missing or locked physical file
+        // must not turn a committed database deletion into a 500 response.
+        try {
+            Files.deleteIfExists(Paths.get(filePath));
+        } catch (IOException | RuntimeException e) {
+            logger.warning("PDF " + pdfId
+                    + " was deleted from the database, but its file could not be removed: "
+                    + e.getMessage());
+        }
+    }
+
+    private String deletePdfData(Long pdfId, Long userId) {
+        PdfDocument pdf = getOwnedPdfById(pdfId, userId);
+        String filePath = pdf.getFilePath();
+
+        documentChunkRepository.deleteByPdfDocumentId(pdfId);
+
         List<Topic> topics = topicRepository.findByPdfDocumentId(pdfId);
         for (Topic topic : topics) {
-            try {
-                quizAttemptRepository.deleteByQuizTopicId(topic.getId());
-            } catch (Exception e) {
-                logger.warning("Error deleting attempts for topic " + topic.getId() + ": " + e.getMessage());
-            }
-            try {
-                studyProgressRepository.deleteByTopicId(topic.getId());
-            } catch (Exception e) {
-                logger.warning("Error deleting study progress for topic " + topic.getId() + ": " + e.getMessage());
-            }
-            try {
-                quizRepository.deleteByTopicId(topic.getId());
-            } catch (Exception e) {
-                logger.warning("Error deleting quizzes for topic " + topic.getId() + ": " + e.getMessage());
-            }
+            Long topicId = topic.getId();
+
+            // Review logs point directly at topics, so they must be removed
+            // before the topic rows.
+            reviewLogRepository.deleteByTopicId(topicId);
+            quizAttemptRepository.deleteByQuizTopicId(topicId);
+            studyProgressRepository.deleteByTopicId(topicId);
+            quizRepository.deleteByTopicId(topicId);
         }
-        try {
-            Files.deleteIfExists(Paths.get(pdf.getFilePath()));
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to delete PDF file", e);
-        }
-        pdfDocumentRepository.delete(pdf);
+
+        topicRepository.deleteByPdfDocumentId(pdfId);
+        pdfDocumentRepository.flush();
+        pdfDocumentRepository.deleteById(pdfId);
+        pdfDocumentRepository.flush();
+
+        return filePath;
     }
 
     public void markAsAnalyzed(Long pdfId) {

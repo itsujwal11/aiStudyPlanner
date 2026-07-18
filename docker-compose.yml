@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg17
     container_name: aasa-postgres
     environment:
       POSTGRES_DB: aasa_db
@@ -25,7 +25,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      platform: linux/amd64
     container_name: aasa-backend
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aasa_db
