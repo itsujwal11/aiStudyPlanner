@@ -30,7 +30,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aasa_db
       SPRING_DATASOURCE_USERNAME: aasa_user
       SPRING_DATASOURCE_PASSWORD: aasa_password
-      GEMINI_API_KEY: AIzaSyBFupP_QViHyFFvuOUolb04oZTkbBedXYU
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in your environment or root .env file}
       GEMINI_MODEL_NAME: gemini-1.5-flash
       JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
     ports:
