@@ -37,7 +37,7 @@ public class ScoringEngineService {
             return 0.0;
         }
 
-        double urgency = 1.0 / (daysUntilExam + 1.0);
+        double urgency = 1.0 / (Math.max(daysUntilExam, 0) + 1.0);
 
         return (0.35 * complexity) +
                (0.25 * importance) +

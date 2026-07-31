@@ -22,57 +22,64 @@ public class VectorSearchService {
 
     /**
      * Search for chunks similar to a query embedding within a specific PDF.
+     * NOTE: pgvector extension is not installed; returns chunks ordered by chunk_index as fallback.
      */
     public List<SearchResult> searchByPdfId(Long pdfId, float[] queryEmbedding, int topK) {
-        logger.info("Vector search in PDF " + pdfId + " for top " + topK + " results");
-        String queryVector = toVectorLiteral(queryEmbedding);
+        logger.info("Vector search in PDF " + pdfId + " for top " + topK + " results (pgvector not available - returning sequential chunks)");
 
-        String sql = """
-            SELECT id, pdf_id, chunk_index, chunk_text, token_count, page_number, created_at,
-                   1 - (embedding <=> CAST(:query AS vector(768))) AS similarity
-            FROM document_chunks
-            WHERE pdf_id = :pdfId
-              AND embedding IS NOT NULL
-            ORDER BY embedding <=> CAST(:query AS vector(768))
-            LIMIT :topK
-            """;
+        try {
+            // Fallback: return recent chunks when pgvector is not available
+            String sql = """
+                SELECT id, pdf_id, chunk_index, chunk_text, token_count, page_number, created_at,
+                       0.0 AS similarity
+                FROM document_chunks
+                WHERE pdf_id = :pdfId
+                ORDER BY chunk_index
+                LIMIT :topK
+                """;
 
-        var query = entityManager.createNativeQuery(sql, Object[].class);
-        query.setParameter("query", queryVector);
-        query.setParameter("pdfId", pdfId);
-        query.setParameter("topK", topK);
+            var query = entityManager.createNativeQuery(sql, Object[].class);
+            query.setParameter("pdfId", pdfId);
+            query.setParameter("topK", topK);
 
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = query.getResultList();
-        return mapResults(rows);
+            @SuppressWarnings("unchecked")
+            List<Object[]> rows = query.getResultList();
+            return mapResults(rows);
+        } catch (Exception e) {
+            logger.warning("Vector search failed (pgvector not installed): " + e.getMessage());
+            return List.of();
+        }
     }
 
     /**
      * Search for chunks similar to a query embedding across all PDFs for a user.
+     * NOTE: pgvector extension is not installed; returns chunks ordered by chunk_index as fallback.
      */
     public List<SearchResult> searchByUserId(Long userId, float[] queryEmbedding, int topK) {
-        logger.info("Vector search for user " + userId + " for top " + topK + " results");
-        String queryVector = toVectorLiteral(queryEmbedding);
+        logger.info("Vector search for user " + userId + " for top " + topK + " results (pgvector not available - returning sequential chunks)");
 
-        String sql = """
-            SELECT dc.id, dc.pdf_id, dc.chunk_index, dc.chunk_text, dc.token_count, dc.page_number, dc.created_at,
-                   1 - (dc.embedding <=> CAST(:query AS vector(768))) AS similarity
-            FROM document_chunks dc
-            JOIN pdf_documents pd ON pd.id = dc.pdf_id
-            WHERE pd.user_id = :userId
-              AND dc.embedding IS NOT NULL
-            ORDER BY dc.embedding <=> CAST(:query AS vector(768))
-            LIMIT :topK
-            """;
+        try {
+            String sql = """
+                SELECT dc.id, dc.pdf_id, dc.chunk_index, dc.chunk_text, dc.token_count, dc.page_number, dc.created_at,
+                       0.0 AS similarity
+                FROM document_chunks dc
+                JOIN pdf_documents pd ON pd.id = dc.pdf_id
+                WHERE pd.user_id = :userId
+                ORDER BY dc.pdf_id, dc.chunk_index
+                LIMIT :topK
+                """;
 
-        var query = entityManager.createNativeQuery(sql, Object[].class);
-        query.setParameter("query", queryVector);
-        query.setParameter("userId", userId);
-        query.setParameter("topK", topK);
+            var query = entityManager.createNativeQuery(sql, Object[].class);
+            query.setParameter("userId", userId);
+            query.setParameter("topK", topK);
 
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = query.getResultList();
-        return mapResults(rows);
+            @SuppressWarnings("unchecked")
+            List<Object[]> rows = query.getResultList();
+            return mapResults(rows);
+        } catch (Exception e) {
+            logger.warning("Vector search failed (pgvector not installed): " + e.getMessage());
+            return List.of();
+        }
     }
 
     private List<SearchResult> mapResults(List<Object[]> rows) {

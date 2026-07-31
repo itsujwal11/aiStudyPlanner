@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { pdfAPI, topicAPI } from '../api'
+import { pdfAPI } from '../api'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { Upload, AlertCircle, CheckCircle, Loader, ArrowLeft } from 'lucide-react'
@@ -11,7 +11,6 @@ export const UploadPdf = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [analyzing, setAnalyzing] = useState(false)
   const [progress, setProgress] = useState({ stage: '', percentage: 0 })
   const navigate = useNavigate()
 
@@ -38,30 +37,17 @@ export const UploadPdf = () => {
     setProgress({ stage: 'Uploading PDF...', percentage: 10 })
 
     try {
-      const response = await pdfAPI.upload(file, examDate)
-      setProgress({ stage: 'PDF uploaded successfully', percentage: 30 })
+      await pdfAPI.upload(file, examDate)
+      setProgress({ stage: 'Upload complete. AI processing continues in the background.', percentage: 100 })
       setFile(null)
       setExamDate('')
-
-      setAnalyzing(true)
-      setProgress({ stage: 'Analyzing content with AI...', percentage: 50 })
-      await topicAPI.analyze(response.data.id)
-
-      setProgress({ stage: 'Extracting topics...', percentage: 70 })
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      setProgress({ stage: 'Generating quizzes...', percentage: 85 })
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      setProgress({ stage: 'Finalizing study plan...', percentage: 95 })
-      setSuccess('PDF analyzed successfully!')
-
-      toast.success('PDF uploaded and analyzed!')
+      setSuccess('PDF uploaded. You can leave this page while topics and quizzes are generated.')
+      toast.success('PDF uploaded. Processing in background.')
 
       setTimeout(() => {
         setProgress({ stage: '', percentage: 0 })
-        navigate('/study')
-      }, 1500)
+        navigate('/dashboard')
+      }, 1200)
     } catch (err) {
       const errorMsg = err.response?.data || err.response?.data?.message || err.message || 'Upload failed'
       setError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg))
@@ -69,7 +55,6 @@ export const UploadPdf = () => {
       setProgress({ stage: '', percentage: 0 })
     } finally {
       setLoading(false)
-      setAnalyzing(false)
     }
   }
 
@@ -106,7 +91,7 @@ export const UploadPdf = () => {
             </motion.div>
           )}
 
-          {(loading || analyzing) && (
+          {loading && (
             <div className="glass-pane-sm rounded-xl p-4 mb-6">
               <div className="flex items-center gap-3 mb-3">
                 <Loader className="w-5 h-5 text-on-surface animate-spin" />
@@ -124,7 +109,7 @@ export const UploadPdf = () => {
             </div>
           )}
 
-          {!loading && !analyzing && (
+          {!loading && (
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-on-surface-variant/70 mb-2">PDF File</label>
@@ -136,16 +121,16 @@ export const UploadPdf = () => {
                     </p>
                     <p className="text-xs text-on-surface-variant/70 mt-1">PDF files only</p>
                   </div>
-                  <input type="file" accept=".pdf" onChange={handleFileChange} className="hidden" disabled={loading || analyzing} />
+                  <input type="file" accept=".pdf" onChange={handleFileChange} className="hidden" disabled={loading} />
                 </label>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-on-surface-variant/70 mb-2">Exam Date</label>
-                <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} className="input-glass px-4" disabled={loading || analyzing} required />
+                <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} className="input-glass px-4" disabled={loading} required />
               </div>
 
-              <button type="submit" disabled={loading || analyzing || !file || !examDate} className="btn-glass-primary w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              <button type="submit" disabled={loading || !file || !examDate} className="btn-glass-primary w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 <Upload className="w-4 h-4" />
                 Upload & Analyze
               </button>

@@ -15,7 +15,7 @@ export const ProgressTimeline = () => {
   const fetchTimeline = async () => {
     try {
       setLoading(true)
-      const response = await quizAPI.getById(1)
+      await quizAPI.getById(1)
       const mockTimeline = generateMockTimeline()
       setTimeline(mockTimeline)
       setError('')

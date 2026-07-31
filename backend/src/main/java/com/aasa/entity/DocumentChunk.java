@@ -33,11 +33,7 @@ public class DocumentChunk {
     @Column(name = "chunk_text", columnDefinition = "TEXT", nullable = false)
     private String chunkText;
 
-    @Column(name = "embedding", columnDefinition = "vector(768)")
-    @ColumnTransformer(
-            read = "CAST(embedding AS text)",
-            write = "CAST(? AS vector(768))"
-    )
+    @Column(name = "embedding", columnDefinition = "TEXT")
     private String embedding;
 
     @Column(name = "token_count")

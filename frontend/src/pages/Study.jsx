@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { pdfAPI, topicAPI, quizAPI, dashboardAPI, recommendationAPI } from '../api'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { topicAPI, quizAPI, dashboardAPI, recommendationAPI } from '../api'
 import { StudyTimer } from '../components/StudyTimer'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
@@ -10,8 +10,10 @@ import { BookOpen, AlertCircle, CheckCircle, XCircle, ArrowRight, BarChart3, Arr
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
 const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
 
-export const Study = () => {
+export const Study = ({ mode = 'practice' }) => {
   const { pdfId } = useParams()
+  const [searchParams] = useSearchParams()
+  const selectedTopicId = searchParams.get('topicId')
   const [topics, setTopics] = useState([])
   const [allQuizzes, setAllQuizzes] = useState([])
   const [currentGlobalQuizIndex, setCurrentGlobalQuizIndex] = useState(0)
@@ -21,27 +23,75 @@ export const Study = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [startTime, setStartTime] = useState(null)
+  const [resumedCount, setResumedCount] = useState(0)
+  const [answeredQuizIds, setAnsweredQuizIds] = useState(new Set())
   const [quizStats, setQuizStats] = useState({ correct: 0, total: 0 })
   const [sessionComplete, setSessionComplete] = useState(false)
   const [topicQuizMap, setTopicQuizMap] = useState({})
   const navigate = useNavigate()
 
-  useEffect(() => { fetchTopicsAndQuizzes() }, [pdfId])
+  useEffect(() => { fetchTopicsAndQuizzes() }, [pdfId, mode, selectedTopicId])
 
+
+  const buildDiagnosticSet = (quizMap, availableTopics) => {
+    const diagnostic = []
+    let round = 0
+    while (diagnostic.length < 15) {
+      let addedThisRound = false
+      for (const topic of availableTopics) {
+        const quiz = quizMap[topic.id]?.[round]
+        if (quiz) {
+          diagnostic.push({ ...quiz, topicId: topic.id })
+          addedThisRound = true
+          if (diagnostic.length === 15) break
+        }
+      }
+      if (!addedThisRound) break
+      round += 1
+    }
+    return diagnostic
+  }
   const fetchTopicsAndQuizzes = async () => {
     try {
       const topicsResponse = pdfId ? await topicAPI.getByPdf(pdfId) : await topicAPI.getRanked()
-      setTopics(topicsResponse.data)
+      const visibleTopics = selectedTopicId
+        ? topicsResponse.data.filter((topic) => String(topic.id) === selectedTopicId)
+        : topicsResponse.data
+      setTopics(visibleTopics)
       const quizMap = {}
       let allQuizzesArray = []
-      for (const topic of topicsResponse.data) {
+      for (const topic of visibleTopics) {
         const quizzesResponse = await quizAPI.getByTopic(topic.id)
         quizMap[topic.id] = quizzesResponse.data
         allQuizzesArray = [...allQuizzesArray, ...quizzesResponse.data.map(q => ({ ...q, topicId: topic.id }))]
       }
+      if (mode === 'diagnostic') {
+        allQuizzesArray = buildDiagnosticSet(quizMap, visibleTopics)
+      }
       setTopicQuizMap(quizMap)
       setAllQuizzes(allQuizzesArray)
       setStartTime(Date.now())
+
+      let attemptedQuizIds = []
+      try {
+        const progressResponse = await quizAPI.getProgress(pdfId)
+        attemptedQuizIds = progressResponse.data?.attemptedQuizIds || []
+      } catch (progressError) {
+        console.warn('Could not restore quiz progress:', progressError)
+      }
+
+      const attemptedSet = new Set(attemptedQuizIds)
+      const completedCount = allQuizzesArray.filter((quiz) => attemptedSet.has(quiz.id)).length
+      const firstUnansweredIndex = allQuizzesArray.findIndex((quiz) => !attemptedSet.has(quiz.id))
+      if (mode === 'diagnostic' && firstUnansweredIndex < 0 && allQuizzesArray.length > 0) {
+        toast.success('Diagnostic complete. Your planner is ready.')
+        navigate('/planner', { replace: true })
+        return
+      }
+      setCurrentGlobalQuizIndex(firstUnansweredIndex >= 0 ? firstUnansweredIndex : 0)
+      setResumedCount(completedCount)
+      setAnsweredQuizIds(attemptedSet)
+
       setError('')
     } catch (err) {
       console.error('Error loading topics and quizzes:', err)
@@ -54,6 +104,7 @@ export const Study = () => {
     const timeTaken = Math.floor((Date.now() - startTime) / 1000)
     try {
       const response = await quizAPI.submit(currentQuiz.id, { selectedAnswer, timeTakenSeconds: timeTaken })
+      setAnsweredQuizIds((previous) => new Set([...previous, currentQuiz.id]))
       setResult(response.data)
       setSubmitted(true)
       setQuizStats(prev => ({ correct: prev.correct + (response.data.isCorrect ? 1 : 0), total: prev.total + 1 }))
@@ -64,8 +115,11 @@ export const Study = () => {
   }
 
   const handleNextQuiz = () => {
-    if (currentGlobalQuizIndex < allQuizzes.length - 1) {
-      setCurrentGlobalQuizIndex(currentGlobalQuizIndex + 1)
+    const nextUnansweredIndex = allQuizzes.findIndex(
+      (quiz, index) => index > currentGlobalQuizIndex && !answeredQuizIds.has(quiz.id)
+    )
+    if (nextUnansweredIndex >= 0) {
+      setCurrentGlobalQuizIndex(nextUnansweredIndex)
       setSelectedAnswer('')
       setSubmitted(false)
       setResult(null)
@@ -73,13 +127,6 @@ export const Study = () => {
     } else {
       handleSessionComplete()
     }
-  }
-
-  const calculateWeakness = (accuracy, attempts) => {
-    let multiplier = 1.0
-    if (attempts <= 3) multiplier = 1.8
-    else if (attempts <= 8) multiplier = 1.2
-    return (1 - accuracy) * multiplier
   }
 
   const fireConfetti = () => {
@@ -94,13 +141,13 @@ export const Study = () => {
   }
 
   const handleSessionComplete = async () => {
-    const accuracy = quizStats.total > 0 ? quizStats.correct / quizStats.total : 0
-    const weakness = calculateWeakness(accuracy, quizStats.total)
     try {
-      for (const topic of topics) {
-        await topicAPI.updateWeakness(topic.id, { weakness, accuracy, attempts: quizStats.total })
+      try {
+        await dashboardAPI.get()
+        await recommendationAPI.getNextTopics(10)
+      } catch (refreshError) {
+        console.warn('Session saved, but dashboard refresh failed:', refreshError)
       }
-      try { await dashboardAPI.get(); await recommendationAPI.getNextTopics(10) } catch (_) {}
       fireConfetti()
       toast.success('Session complete! Great work!')
       setSessionComplete(true)
@@ -137,7 +184,9 @@ export const Study = () => {
   const currentQuiz = allQuizzes[currentGlobalQuizIndex]
   const currentTopic = topics.find(t => t.id === currentQuiz.topicId)
   const progress = ((currentGlobalQuizIndex + 1) / allQuizzes.length) * 100
-  const isLastQuiz = currentGlobalQuizIndex === allQuizzes.length - 1
+  const isLastQuiz = !allQuizzes.some(
+    (quiz, index) => index > currentGlobalQuizIndex && !answeredQuizIds.has(quiz.id)
+  )
   const accuracy = quizStats.total > 0 ? Math.round((quizStats.correct / quizStats.total) * 100) : 0
 
   if (sessionComplete) {
@@ -189,8 +238,14 @@ export const Study = () => {
       <motion.div variants={item} className="glass-pane rounded-xl p-6 border border-black/8">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-xl font-bold text-on-surface">Study Session</h1>
-            <p className="text-sm text-on-surface-variant/70">Complete all quizzes to update your learning priorities</p>
+            <h1 className="text-xl font-bold text-on-surface">{mode === 'diagnostic' ? 'Diagnostic Quiz' : 'Practice Session'}</h1>
+            <p className="text-sm text-on-surface-variant/70">
+              {resumedCount > 0
+                ? `${resumedCount} answered question${resumedCount === 1 ? '' : 's'} restored. Continue from where you stopped.`
+                : mode === 'diagnostic'
+                  ? 'A short, balanced quiz that creates your first evidence-based study plan.'
+                  : 'Practise weak topics and keep your mastery estimate current.'}
+            </p>
           </div>
           <div className="text-right">
             <p className="text-sm text-on-surface-variant/70">Question {currentGlobalQuizIndex + 1} of {allQuizzes.length}</p>
@@ -220,7 +275,9 @@ export const Study = () => {
               <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                 {topics.map((topic) => {
                   const topicQuizzes = topicQuizMap[topic.id] || []
-                  const topicQuizzesAnswered = allQuizzes.filter(q => q.topicId === topic.id && currentGlobalQuizIndex >= allQuizzes.indexOf(q)).length
+                  const topicQuizzesAnswered = allQuizzes.filter(
+                    q => q.topicId === topic.id && answeredQuizIds.has(q.id)
+                  ).length
                   return (
                     <div key={topic.id} className="bg-white/40 backdrop-blur-sm border border-black/8 rounded-xl p-4">
                       <div className="flex items-start justify-between mb-2">
@@ -311,8 +368,8 @@ export const Study = () => {
                   <div className="text-right">
                     <p className="text-on-surface-variant/70 text-sm">Difficulty</p>
                     <p className={`font-semibold text-sm ${
-                      currentQuiz.difficulty === 'hard' ? 'text-error' :
-                      currentQuiz.difficulty === 'medium' ? 'text-yellow-600' : 'text-emerald-600'
+                      currentQuiz.difficulty?.toUpperCase() === 'HARD' ? 'text-error' :
+                      currentQuiz.difficulty?.toUpperCase() === 'MEDIUM' ? 'text-yellow-600' : 'text-emerald-600'
                     }`}>
                       {currentQuiz.difficulty?.charAt(0).toUpperCase() + currentQuiz.difficulty?.slice(1)}
                     </p>

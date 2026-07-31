@@ -8,6 +8,7 @@ import com.aasa.entity.QuizAttempt;
 import com.aasa.entity.Topic;
 import com.aasa.entity.User;
 import com.aasa.repository.QuizAttemptRepository;
+import com.aasa.repository.PdfDocumentRepository;
 import com.aasa.service.AuthService;
 import com.aasa.service.QuizEngineService;
 import com.aasa.service.StudyProgressService;
@@ -19,6 +20,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 @RestController
@@ -43,6 +45,9 @@ public class QuizController {
     @Autowired
     private QuizAttemptRepository quizAttemptRepository;
 
+    @Autowired
+    private PdfDocumentRepository pdfDocumentRepository;
+
     @GetMapping("/topic/{topicId}")
     @Transactional(readOnly = true)
     public ResponseEntity<List<QuizDto>> getQuizzesByTopic(@PathVariable Long topicId) {
@@ -55,6 +60,28 @@ public class QuizController {
             logger.severe("Error fetching quizzes: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    @GetMapping("/progress")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getQuizProgress(
+            @RequestParam(required = false) Long pdfId,
+            Authentication authentication) {
+        User user = authService.getUserByEmail(authentication.getName());
+
+        if (pdfId != null && pdfDocumentRepository.findByIdAndUserId(pdfId, user.getId()).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "PDF not found"));
+        }
+
+        List<Long> attemptedQuizIds = pdfId == null
+                ? quizAttemptRepository.findAttemptedQuizIdsByUserId(user.getId())
+                : quizAttemptRepository.findAttemptedQuizIdsByUserIdAndPdfId(user.getId(), pdfId);
+
+        return ResponseEntity.ok(Map.of(
+                "attemptedQuizIds", attemptedQuizIds,
+                "attemptedCount", attemptedQuizIds.size()
+        ));
     }
 
     @GetMapping("/{quizId}")

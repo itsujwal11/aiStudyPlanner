@@ -34,12 +34,21 @@ public class PdfDocument {
     @Column(name = "exam_date", nullable = false)
     private LocalDate examDate;
 
-    @Column(name = "extracted_text")
-    @Lob
+    @Column(name = "extracted_text", columnDefinition = "TEXT")
     private String extractedText;
 
     @Column(name = "is_analyzed")
+    @Builder.Default
     private Boolean isAnalyzed = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "processing_status", nullable = false, length = 20,
+            columnDefinition = "varchar(20) default 'COMPLETED'")
+    @Builder.Default
+    private ProcessingStatus processingStatus = ProcessingStatus.PENDING;
+
+    @Column(name = "processing_error", length = 1000)
+    private String processingError;
 
     @OneToMany(mappedBy = "pdfDocument", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Topic> topics;
@@ -47,5 +56,12 @@ public class PdfDocument {
     @PrePersist
     protected void onCreate() {
         uploadDate = LocalDateTime.now();
+    }
+
+    public enum ProcessingStatus {
+        PENDING,
+        PROCESSING,
+        COMPLETED,
+        FAILED
     }
 }

@@ -6,6 +6,7 @@ import com.aasa.entity.User;
 import com.aasa.repository.*;
 import com.aasa.service.AuthService;
 import com.aasa.service.PdfManagementService;
+import com.aasa.service.PdfProcessingService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,9 @@ public class PdfController {
 
     @Autowired
     private PdfManagementService pdfManagementService;
+
+    @Autowired
+    private PdfProcessingService pdfProcessingService;
 
     @Autowired
     private AuthService authService;
@@ -81,6 +85,7 @@ public class PdfController {
 
         PdfDocumentDto result = pdfManagementService.uploadPdf(file, user, parsedDate);
         logger.info("PDF uploaded successfully with ID: " + result.getId());
+        pdfProcessingService.processAsync(result.getId());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }

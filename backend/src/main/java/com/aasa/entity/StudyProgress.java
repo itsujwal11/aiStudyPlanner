@@ -29,33 +29,43 @@ public class StudyProgress {
     private WeaknessLevel weaknessLevel;
 
     @Column(name = "completion_percentage")
+    @Builder.Default
     private Double completionPercentage = 0.0;
 
     @Column(name = "best_score")
+    @Builder.Default
     private Double bestScore = 0.0;
 
     @Column(name = "total_attempts")
+    @Builder.Default
     private Integer totalAttempts = 0;
 
     @Column(name = "correct_attempts")
+    @Builder.Default
     private Integer correctAttempts = 0;
 
     @Column(name = "mastery_level")
+    @Builder.Default
     private Double masteryLevel = 0.0;
 
     @Column(name = "alpha_param")
+    @Builder.Default
     private Double alpha = 2.0;
 
     @Column(name = "beta_param")
+    @Builder.Default
     private Double beta = 8.0;
 
     @Column(name = "sm2_interval")
+    @Builder.Default
     private Integer sm2Interval = 0;
 
     @Column(name = "sm2_efactor")
+    @Builder.Default
     private Double sm2Efactor = 2.5;
 
     @Column(name = "sm2_repetitions")
+    @Builder.Default
     private Integer sm2Repetitions = 0;
 
     @Column(name = "next_review_date")
@@ -65,6 +75,6 @@ public class StudyProgress {
     private LocalDate lastStudyDate;
 
     public enum WeaknessLevel {
-        LOW, MEDIUM, HIGH, NOT_ATTEMPTED
+        LOW, MEDIUM, HIGH, INSUFFICIENT_DATA, NOT_ATTEMPTED
     }
 }

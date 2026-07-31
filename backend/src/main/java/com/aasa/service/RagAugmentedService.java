@@ -2,11 +2,14 @@ package com.aasa.service;
 
 import com.aasa.dto.RagAnswerDto;
 import com.aasa.dto.RagChunkSource;
+import com.aasa.dto.PredefinedAnswerDto;
 import com.aasa.entity.DocumentChunk;
 import com.aasa.entity.PdfDocument;
+import com.aasa.entity.Topic;
 import com.aasa.entity.User;
 import com.aasa.repository.DocumentChunkRepository;
 import com.aasa.repository.PdfDocumentRepository;
+import com.aasa.repository.TopicRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +35,8 @@ public class RagAugmentedService {
     private static final Logger logger = Logger.getLogger(RagAugmentedService.class.getName());
 
     private static final int TOP_K_CHUNKS = 5;
+    private static final int MAX_OVERVIEW_CHUNKS = 12;
+    private static final int MAX_PREDEFINED_TOPICS = 20;
     private static final int TIMEOUT_SECONDS = 120;
     private static final int MAX_ATTEMPTS = 3;
     private static final int EMBEDDING_DIMENSION = 768;
@@ -56,6 +61,9 @@ public class RagAugmentedService {
     private PdfDocumentRepository pdfDocumentRepository;
 
     @Autowired
+    private TopicRepository topicRepository;
+
+    @Autowired
     private TextChunkingService textChunkingService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -78,28 +86,30 @@ public class RagAugmentedService {
                         + " with " + question.length() + " characters"
         );
 
-        if (pdfId != null && getPdfForUser(pdfId, user.getId()) == null) {
+        PdfDocument selectedPdf = pdfId == null ? null : getPdfForUser(pdfId, user.getId());
+        if (pdfId != null && selectedPdf == null) {
             throw new SecurityException("PDF not found");
         }
 
-        // 1. Generate embedding for the question
-        float[] queryEmbedding = embeddingService.generateEmbedding(question);
-        
-        // Check if embeddings are available
-        if (queryEmbedding == null) {
-            logger.warning("Embeddings not available - RAG search disabled");
-            return RagAnswerDto.builder()
-                    .answer("I'm sorry, the semantic search feature is currently unavailable. Please try again later or contact support if this issue persists.")
-                    .sources(List.of())
-                    .build();
-        }
-
-        // 2. Search for relevant chunks
         List<VectorSearchService.SearchResult> searchResults;
-        if (pdfId != null) {
-            searchResults = vectorSearchService.searchByPdfId(pdfId, queryEmbedding, TOP_K_CHUNKS);
+        if (isOverviewQuestion(question)) {
+            List<PdfDocument> targetPdfs = selectedPdf == null
+                    ? pdfDocumentRepository.findByUserId(user.getId())
+                    : List.of(selectedPdf);
+            searchResults = getRepresentativeChunks(targetPdfs);
         } else {
-            searchResults = vectorSearchService.searchByUserId(user.getId(), queryEmbedding, TOP_K_CHUNKS);
+            float[] queryEmbedding = embeddingService.generateEmbedding(question);
+            if (queryEmbedding == null) {
+                logger.warning("Embeddings not available - RAG search disabled");
+                return RagAnswerDto.builder()
+                        .answer("I'm sorry, the semantic search feature is currently unavailable. Please try again later or contact support if this issue persists.")
+                        .sources(List.of())
+                        .build();
+            }
+
+            searchResults = pdfId != null
+                    ? vectorSearchService.searchByPdfId(pdfId, queryEmbedding, TOP_K_CHUNKS)
+                    : vectorSearchService.searchByUserId(user.getId(), queryEmbedding, TOP_K_CHUNKS);
         }
 
         if (searchResults.isEmpty()) {
@@ -153,6 +163,119 @@ public class RagAugmentedService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public List<PredefinedAnswerDto> getPredefinedAnswers(User user, Long pdfId) {
+        List<Topic> topics;
+        if (pdfId != null) {
+            if (getPdfForUser(pdfId, user.getId()) == null) {
+                throw new SecurityException("PDF not found");
+            }
+            topics = topicRepository.findByPdfDocumentId(pdfId);
+        } else {
+            topics = topicRepository.findByUserIdOrderByPriority(user.getId());
+        }
+
+        if (topics.isEmpty()) {
+            return List.of();
+        }
+
+        List<Topic> limitedTopics = topics.stream()
+                .limit(MAX_PREDEFINED_TOPICS)
+                .toList();
+        List<PredefinedAnswerDto> answers = new ArrayList<>();
+
+        StringBuilder overview = new StringBuilder(
+                "Your study material contains these main topics:\n\n"
+        );
+        for (int i = 0; i < limitedTopics.size(); i++) {
+            Topic topic = limitedTopics.get(i);
+            overview.append(i + 1)
+                    .append(". **")
+                    .append(topic.getTitle())
+                    .append("**");
+            if (topic.getDescription() != null && !topic.getDescription().isBlank()) {
+                overview.append(" — ").append(topic.getDescription());
+            }
+            overview.append("\n");
+        }
+
+        answers.add(PredefinedAnswerDto.builder()
+                .id("overview")
+                .question("What topics are covered in my study material?")
+                .answer(overview.toString().trim())
+                .type("OVERVIEW")
+                .build());
+
+        for (Topic topic : limitedTopics) {
+            String description = topic.getDescription() == null
+                    || topic.getDescription().isBlank()
+                    ? "This topic was identified in your uploaded study material."
+                    : topic.getDescription().trim();
+
+            answers.add(PredefinedAnswerDto.builder()
+                    .id("topic-" + topic.getId() + "-what")
+                    .topicId(topic.getId())
+                    .topicTitle(topic.getTitle())
+                    .question("What is " + topic.getTitle() + "?")
+                    .answer(description)
+                    .type("TOPIC_OVERVIEW")
+                    .build());
+
+            int quizCount = topic.getQuizzes() == null ? 0 : topic.getQuizzes().size();
+            String studyAnswer = buildStudyGuidance(topic, description, quizCount);
+            answers.add(PredefinedAnswerDto.builder()
+                    .id("topic-" + topic.getId() + "-study")
+                    .topicId(topic.getId())
+                    .topicTitle(topic.getTitle())
+                    .question("How should I study " + topic.getTitle() + "?")
+                    .answer(studyAnswer)
+                    .type("STUDY_GUIDANCE")
+                    .build());
+        }
+
+        return answers;
+    }
+
+    private String buildStudyGuidance(Topic topic, String description, int quizCount) {
+        String complexity = describeScore(topic.getComplexityScore());
+        String importance = describeScore(topic.getImportanceScore());
+
+        StringBuilder guidance = new StringBuilder();
+        guidance.append("**Study profile:** ")
+                .append(complexity)
+                .append(" complexity and ")
+                .append(importance)
+                .append(" importance.\n\n")
+                .append("1. Read the topic overview and identify its main terms.\n")
+                .append("2. Break the concept into smaller parts and explain each part in your own words.\n");
+
+        if (quizCount > 0) {
+            guidance.append("3. Complete the ")
+                    .append(quizCount)
+                    .append(" saved practice question")
+                    .append(quizCount == 1 ? "" : "s")
+                    .append(" for this topic and review every explanation.\n");
+        } else {
+            guidance.append("3. Create a short example and test whether you can explain it without notes.\n");
+        }
+
+        guidance.append("\n**Topic overview:** ").append(description);
+        return guidance.toString();
+    }
+
+    private String describeScore(Double score) {
+        if (score == null) {
+            return "moderate";
+        }
+        if (score >= 0.7) {
+            return "high";
+        }
+        if (score >= 0.4) {
+            return "moderate";
+        }
+        return "low";
+    }
+
     /**
      * Generate quizzes for a topic using RAG-augmented context instead of full text.
      */
@@ -174,11 +297,66 @@ public class RagAugmentedService {
                 .collect(Collectors.joining("\n\n---\n\n"));
     }
 
+    private boolean isOverviewQuestion(String question) {
+        String normalized = question == null ? "" : question.toLowerCase();
+        return normalized.contains("summarize")
+                || normalized.contains("summary")
+                || normalized.contains("overview")
+                || normalized.contains("whole pdf")
+                || normalized.contains("entire pdf")
+                || normalized.contains("explain the pdf")
+                || normalized.contains("all topic")
+                || normalized.contains("main topic");
+    }
+
+    private List<VectorSearchService.SearchResult> getRepresentativeChunks(
+            List<PdfDocument> pdfs
+    ) {
+        if (pdfs == null || pdfs.isEmpty()) {
+            return List.of();
+        }
+
+        List<VectorSearchService.SearchResult> results = new ArrayList<>();
+        int chunksPerPdf = Math.max(1, MAX_OVERVIEW_CHUNKS / pdfs.size());
+
+        for (PdfDocument pdf : pdfs) {
+            List<DocumentChunk> chunks =
+                    documentChunkRepository.findByPdfDocumentIdOrderByChunkIndex(pdf.getId());
+            int sampleCount = Math.min(chunksPerPdf, chunks.size());
+
+            for (int i = 0; i < sampleCount; i++) {
+                int position = sampleCount == 1
+                        ? 0
+                        : (int) Math.round(i * (chunks.size() - 1.0) / (sampleCount - 1.0));
+                DocumentChunk chunk = chunks.get(position);
+                results.add(new VectorSearchService.SearchResult(
+                        chunk.getId(),
+                        pdf.getId(),
+                        chunk.getChunkIndex(),
+                        chunk.getChunkText(),
+                        chunk.getTokenCount(),
+                        chunk.getPageNumber(),
+                        chunk.getCreatedAt(),
+                        null
+                ));
+            }
+
+            if (results.size() >= MAX_OVERVIEW_CHUNKS) {
+                break;
+            }
+        }
+
+        return results.size() <= MAX_OVERVIEW_CHUNKS
+                ? results
+                : new ArrayList<>(results.subList(0, MAX_OVERVIEW_CHUNKS));
+    }
+
     private String buildRagPrompt(String question, String context) {
         return "You are an AI study assistant helping a student understand their course material. " +
                "Answer the following question based ONLY on the provided context from their study documents. " +
                "If the context doesn't contain enough information to answer, say so clearly. " +
-               "Cite specific sources where possible.\n\n" +
+               "For summaries, organize the answer by the major topics visible across the context. " +
+               "Use short [Source N] citations where helpful, but do not add a Sources section because the interface displays sources separately.\n\n" +
                "CONTEXT:\n" + context + "\n\n" +
                "QUESTION: " + question + "\n\n" +
                "Provide a clear, educational answer based on the context above.";

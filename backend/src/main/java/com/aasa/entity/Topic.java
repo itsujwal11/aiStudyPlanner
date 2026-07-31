@@ -23,8 +23,7 @@ public class Topic {
     @Column(nullable = false)
     private String title;
 
-    @Column
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String description;
 
     @Column(name = "concept_density")

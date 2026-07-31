@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { plannerAPI } from '../api'
 import {
-  ListChecks, Target, TrendingUp, Calendar, Clock, AlertTriangle,
-  CheckCircle, XCircle, BookOpen, Zap, BarChart3, ArrowRight,
-  BrainCircuit, CalendarDays, GraduationCap, Lightbulb, ChevronRight, ArrowLeft
+  ListChecks, Target, Calendar, Clock, AlertTriangle,
+  CheckCircle, BookOpen, Zap, BarChart3, ArrowRight,
+  CalendarDays, GraduationCap, Lightbulb, ChevronRight, ArrowLeft, AlertCircle
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -131,7 +131,7 @@ export const Planner = () => {
         <div className="glass-pane rounded-xl p-5 border border-black/8 hover:bg-white/85 transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-on-surface-variant/70 font-medium mb-1">Today's Tasks</p>
+              <p className="text-sm text-on-surface-variant/70 font-medium mb-1">Today&apos;s Tasks</p>
               <p className="text-3xl font-bold text-primary">{completedCount}/{totalTasksToday}</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -214,7 +214,7 @@ export const Planner = () => {
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-on-surface flex items-center gap-2">
                 <ListChecks className="w-5 h-5 text-primary" />
-                Today's Tasks
+                Today&apos;s Tasks
                 {totalTasksToday > 0 && <span className="text-sm font-normal text-on-surface-variant/70">({completedCount}/{totalTasksToday} completed)</span>}
               </h2>
               <span className="text-sm text-on-surface-variant/70 bg-white/40 px-3 py-1 rounded-lg">~{planner.totalDurationMinutesToday}m total</span>

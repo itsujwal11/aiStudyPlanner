@@ -34,7 +34,7 @@ services:
       GEMINI_MODEL_NAME: gemini-1.5-flash
       JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
     ports:
-      - "8080:8080"
+      - "9096:9096"
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,7 +49,7 @@ services:
       dockerfile: Dockerfile
     container_name: aasa-frontend
     environment:
-      VITE_API_URL: http://localhost:8080/api
+      VITE_API_URL: http://localhost:9096/api
     ports:
       - "3000:3000"
     depends_on:

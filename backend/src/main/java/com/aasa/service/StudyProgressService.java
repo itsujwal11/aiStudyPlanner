@@ -86,16 +86,19 @@ public class StudyProgressService {
         Double completionPercentage = (progress.getCorrectAttempts() * 100.0) / progress.getTotalAttempts();
         progress.setCompletionPercentage(completionPercentage);
 
-        StudyProgress.WeaknessLevel weaknessLevel = weaknessEngineService.calculateWeaknessLevel(score);
-        progress.setWeaknessLevel(weaknessLevel);
-
         MasteryService.SpacedRepetitionResult sr = masteryService.updateAfterAttempt(
                 user, topic, progress,
                 attempt.getIsCorrect(),
                 attempt.getTimeTakenSeconds() != null ? attempt.getTimeTakenSeconds().intValue() : 0
         );
 
-        logger.info("Updated progress - Score: " + score + ", Weakness: " + weaknessLevel
+        List<QuizAttempt> attempts = quizAttemptRepository.findByUserIdAndTopicId(user.getId(), topic.getId());
+        WeaknessEngineService.WeaknessResult weakness = weaknessEngineService.calculateEvidenceBasedWeakness(
+                attempts, sr.mastery, progress.getNextReviewDate());
+        progress.setWeaknessLevel(weakness.level());
+        topic.setWeaknessScore(weakness.score());
+
+        logger.info("Updated progress - Score: " + score + ", Weakness: " + weakness.level()
                 + ", Mastery: " + String.format("%.4f", sr.mastery)
                 + ", Next review: " + progress.getNextReviewDate());
 
@@ -118,7 +121,9 @@ public class StudyProgressService {
                 PdfDocument pdf = topic.getPdfDocument();
                 long daysUntilExam = ChronoUnit.DAYS.between(LocalDate.now(), pdf.getExamDate());
 
-                Double weaknessScore = weaknessEngineService.getWeaknessScore(progress.getWeaknessLevel());
+                Double weaknessScore = topic.getWeaknessScore() != null
+                        ? topic.getWeaknessScore()
+                        : weaknessEngineService.getWeaknessScore(progress.getWeaknessLevel());
 
                 Double priorityScore = scoringEngineService.calculatePriorityScore(
                         topic.getComplexityScore(),

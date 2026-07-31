@@ -127,11 +127,10 @@ public class PlannerService {
         if (progress != null) {
             totalAttempts = progress.getTotalAttempts() != null ? progress.getTotalAttempts() : 0;
             correctAttempts = progress.getCorrectAttempts() != null ? progress.getCorrectAttempts() : 0;
-            double score = progress.getBestScore() != null ? progress.getBestScore() : 0.0;
-            masteryLevel = score;
-
-            StudyProgress.WeaknessLevel level = weaknessEngineService.calculateWeaknessLevel(score);
-            weaknessScore = weaknessEngineService.getWeaknessScore(level);
+            masteryLevel = (progress.getMasteryLevel() != null ? progress.getMasteryLevel() : 0.0) * 100.0;
+            weaknessScore = topic.getWeaknessScore() != null
+                    ? topic.getWeaknessScore()
+                    : weaknessEngineService.getWeaknessScore(progress.getWeaknessLevel());
         } else {
             weaknessScore = 1.0; // NOT_ATTEMPTED
             masteryLevel = 0.0;
@@ -139,10 +138,10 @@ public class PlannerService {
 
         double importance = topic.getImportanceScore() != null ? topic.getImportanceScore() : 0.5;
         double complexity = topic.getComplexityScore() != null ? topic.getComplexityScore() : 0.5;
-        double difficulty = complexity;
+        double priorityScore = scoringEngineService.calculatePriorityScore(
+                complexity, importance, weaknessScore, daysUntilExam);
 
         // Priority = (Weakness × Importance × Difficulty) / (Mastery + 0.1)
-        double priorityScore = (weaknessScore * importance * difficulty) / ((masteryLevel / 100.0) + 0.1);
 
         String whyImportant = describeImportance(importance, complexity, weaknessScore);
         String recommendedDuration = estimateDuration(complexity, weaknessScore);

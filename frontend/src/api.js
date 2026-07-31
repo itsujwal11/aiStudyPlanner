@@ -35,6 +35,11 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  verifyEmail: (data) => api.post('/auth/verify-email', data),
+  resendVerification: (data) => api.post('/auth/resend-verification', data),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
+  google: (data) => api.post('/auth/google', data),
   seedAdmin: () => api.post('/auth/seed-admin'),
 }
 
@@ -66,6 +71,7 @@ export const quizAPI = {
   getByTopic: (topicId) => api.get(`/quizzes/topic/${topicId}`),
   getById: (quizId) => api.get(`/quizzes/${quizId}`),
   submit: (quizId, data) => api.post(`/quizzes/${quizId}/submit`, data),
+  getProgress: (pdfId) => api.get('/quizzes/progress', { params: pdfId ? { pdfId } : {} }),
 }
 
 export const dashboardAPI = {
@@ -106,8 +112,8 @@ export const reportAPI = {
 };
 
 export const ragAPI = {
-  askQuestion: (data) => api.post('/rag/ask', data),
-  reprocessPdf: (pdfId) => api.post(`/rag/reprocess/${pdfId}`),
+  getPredefinedAnswers: (pdfId) =>
+    api.get('/rag/predefined', { params: pdfId ? { pdfId } : {} }),
 };
 
 export const adminAPI = {

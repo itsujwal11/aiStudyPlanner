@@ -25,7 +25,9 @@ function formatValue(val, colName, colType) {
   if (isDateLike(colName, colType) && typeof val === 'string') {
     try {
       return { text: new Date(val).toLocaleString(), classes: 'text-cyan-700 text-xs' }
-    } catch { }
+    } catch {
+      // Fall through to the raw value when a date cannot be formatted.
+    }
   }
   let text = String(val)
   if (text.length > 60) text = text.substring(0, 60) + '...'

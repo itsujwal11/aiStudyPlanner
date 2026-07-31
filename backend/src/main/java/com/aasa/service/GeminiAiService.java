@@ -38,6 +38,7 @@ public class GeminiAiService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(30))
+            .version(HttpClient.Version.HTTP_1_1)
             .build();
 
     public AiAnalysisResponse analyzeContent(String extractedText) throws Exception {
@@ -53,7 +54,7 @@ public class GeminiAiService {
             String apiVersion = endpoint[0];
             String model = endpoint[1];
             logger.info("Trying Gemini model: " + model + " (API " + apiVersion + ")");
-            String url = "https://generativelanguage.googleapis.com/" + apiVersion + "/models/" + model + ":generateContent?key=";
+            String url = "https://generativelanguage.googleapis.com/" + apiVersion + "/models/" + model + ":generateContent";
 
             try {
                 String responseJson = callGeminiApi(prompt, url);
@@ -90,12 +91,11 @@ public class GeminiAiService {
         genConfig.put("temperature", 0.2);
 
         String requestBody = objectMapper.writeValueAsString(root);
-        String fullUrl = baseUrl + apiKey;
-
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(fullUrl))
+                .uri(URI.create(baseUrl))
                 .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
                 .header("Content-Type", "application/json")
+                .header("x-goog-api-key", apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 

@@ -75,10 +75,15 @@ public class AuthService {
                     .name("Admin")
                     .password(passwordEncoder.encode("admin123"))
                     .role("ADMIN")
+                    .emailVerified(true)
                     .build();
             userRepository.save(admin);
         }
         User admin = userRepository.findByEmail(adminEmail).get();
+        if (!Boolean.TRUE.equals(admin.getEmailVerified())) {
+            admin.setEmailVerified(true);
+            userRepository.save(admin);
+        }
         String token = jwtTokenProvider.generateToken(admin.getEmail());
         return AuthResponse.builder()
                 .token(token)
@@ -99,6 +104,7 @@ public class AuthService {
                         .name("Admin")
                         .password(passwordEncoder.encode("admin123"))
                         .role("ADMIN")
+                        .emailVerified(true)
                         .build();
                 userRepository.save(admin);
                 System.out.println("Admin user seeded on startup: admin@aasa.com / admin123");

@@ -36,9 +36,6 @@ public class PdfManagementService {
     private PdfExtractionService pdfExtractionService;
 
     @Autowired
-    private RagAugmentedService ragAugmentedService;
-
-    @Autowired
     private TopicRepository topicRepository;
 
     @Autowired
@@ -87,6 +84,7 @@ public class PdfManagementService {
                     .examDate(examDate)
                     .extractedText(extractedText)
                     .isAnalyzed(false)
+                    .processingStatus(PdfDocument.ProcessingStatus.PENDING)
                     .build();
 
             // Commit the database replacement before optional RAG processing.
@@ -104,21 +102,6 @@ public class PdfManagementService {
             deleteFilesBestEffort(obsoleteFilePaths);
             logger.info("PDF saved with ID: " + saved.getId());
 
-            // Process PDF for RAG (chunk + embed) asynchronously
-            // Note: We call this outside the transaction to avoid rollback-only issues
-            // when external API calls (embeddings) fail
-            try {
-                ragAugmentedService.processPdfForRag(saved);
-                logger.info("RAG chunking completed for PDF: " + saved.getId());
-
-                // Generate embeddings in a separate transaction (outside the upload transaction)
-                ragAugmentedService.generateEmbeddingsForChunks(saved);
-                logger.info("RAG embedding completed for PDF: " + saved.getId());
-            } catch (Exception e) {
-                logger.warning("RAG processing failed for PDF " + saved.getId() + ": " + e.getMessage());
-                // Don't fail the upload if RAG processing fails
-            }
-
             return PdfDocumentDto.builder()
                     .id(saved.getId())
                     .fileName(saved.getFileName())
@@ -126,6 +109,8 @@ public class PdfManagementService {
                     .examDate(saved.getExamDate())
                     .isAnalyzed(false)
                     .topicCount(0)
+                    .processingStatus(saved.getProcessingStatus().name())
+                    .processingError(null)
                     .build();
         } catch (IOException e) {
             deleteIncompleteUpload(newFilePath);
@@ -234,6 +219,8 @@ public class PdfManagementService {
                 .examDate(pdf.getExamDate())
                 .isAnalyzed(pdf.getIsAnalyzed())
                 .topicCount(topicCount)
+                .processingStatus(pdf.getProcessingStatus() == null ? null : pdf.getProcessingStatus().name())
+                .processingError(pdf.getProcessingError())
                 .build();
     }
 
@@ -361,6 +348,8 @@ public class PdfManagementService {
                 .examDate(pdf.getExamDate())
                 .isAnalyzed(pdf.getIsAnalyzed())
                 .topicCount(pdf.getTopics() != null ? pdf.getTopics().size() : 0)
+                .processingStatus(pdf.getProcessingStatus() == null ? null : pdf.getProcessingStatus().name())
+                .processingError(pdf.getProcessingError())
                 .build();
     }
 }

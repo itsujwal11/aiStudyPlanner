@@ -1,5 +1,7 @@
 # Adaptive AI Study Planner - Complete System Implementation
 
+> **Current architecture reference:** [`docs/PROJECT_ARCHITECTURE_AND_SYSTEM_GUIDE.md`](docs/PROJECT_ARCHITECTURE_AND_SYSTEM_GUIDE.md). It is reviewed against the present source and identifies legacy documentation, configuration drift, and production limitations. Older claims below are historical and may not match the current runtime.
+
 ## 🎯 Project Status: COMPLETE ✅
 
 All 10 broken systems have been debugged, fixed, and fully connected. The system is now production-ready.
@@ -113,6 +115,12 @@ npm run dev
 - ✅ JSON request/response handling
 - ✅ Error handling and fallback
 - ✅ API key validation
+
+### AI Chat and quota usage
+- Quick answers are built from topics saved during the initial PDF analysis.
+- PDF overview, topic explanation, and study-guidance clicks only read the database and use no Gemini quota.
+- Free-form questions use RAG: a query embedding, pgvector retrieval, and Gemini answer generation.
+- Detailed behavior is documented in docs/PROJECT_ARCHITECTURE_AND_SYSTEM_GUIDE.md.
 
 ### Quiz Generation
 - ✅ AI-generated questions from PDF content

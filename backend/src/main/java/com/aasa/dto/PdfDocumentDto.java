@@ -15,4 +15,6 @@ public class PdfDocumentDto {
     private LocalDate examDate;
     private Boolean isAnalyzed;
     private Integer topicCount;
+    private String processingStatus;
+    private String processingError;
 }

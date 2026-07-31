@@ -64,7 +64,6 @@ public class SecurityConfig {
         for (String origin : origins) {
             configuration.addAllowedOriginPattern(origin.trim());
         }
-        configuration.addAllowedOriginPattern("*");
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
