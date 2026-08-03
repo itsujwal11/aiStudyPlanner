@@ -52,3 +52,9 @@ uploads/
 backend/backend.log*
 backend.log*
 *.gz
+
+# Machine-learning local artifacts
+ml/.venv/
+ml/data/
+ml/models/*.joblib
+ml.zip
