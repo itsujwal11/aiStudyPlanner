@@ -1,6 +1,8 @@
 package com.aasa.controller;
 
 import com.aasa.dto.PredefinedAnswerDto;
+import com.aasa.dto.RagAnswerDto;
+import com.aasa.dto.RagQueryDto;
 import com.aasa.entity.User;
 import com.aasa.service.AuthService;
 import com.aasa.service.RagAugmentedService;
@@ -47,4 +49,25 @@ public class RagController {
         }
     }
 
+    /**
+     * Full RAG question answering:
+     * question → embedding → pgvector cosine retrieval (top 20) → hybrid reranking (top 5)
+     * → grounded Gemini generation with per-source citations.
+     */
+    @PostMapping("/ask")
+    public ResponseEntity<?> ask(@RequestBody RagQueryDto request, Authentication authentication) {
+        try {
+            User user = authService.getUserByEmail(authentication.getName());
+            RagAnswerDto answer = ragAugmentedService.answerQuestion(
+                    user, request.getQuestion(), request.getPdfId());
+            return ResponseEntity.ok(answer);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "PDF not found"));
+        } catch (Exception e) {
+            logger.severe("Error answering RAG question: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to answer question"));
+        }
+    }
 }

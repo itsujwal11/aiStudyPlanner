@@ -27,6 +27,9 @@ public class TopicAnalysisService {
     private TopicRepository topicRepository;
 
     @Autowired
+    private AdaptivePriorityService adaptivePriorityService;
+
+    @Autowired
     private ScoringEngineService scoringEngineService;
 
     @Autowired
@@ -114,11 +117,13 @@ public class TopicAnalysisService {
                 signals.getLength() != null ? signals.getLength() : 100
         );
 
-        Double priorityScore = scoringEngineService.calculatePriorityScore(
-                complexityScore,
-                importanceScore,
+        // Initial adaptive priority before any quiz evidence exists:
+        // full mastery gap (NOT_ATTEMPTED), no accumulated forgetting yet, exam urgency, AI importance.
+        Double priorityScore = adaptivePriorityService.calculatePriorityFromWeakness(
                 1.0, // Default weakness score for NOT_ATTEMPTED
-                daysUntilExam
+                importanceScore,
+                pdfDocument.getExamDate(),
+                null
         );
 
         logger.info("Topic scores - Complexity: " + complexityScore + ", Importance: " + importanceScore + ", Priority: " + priorityScore);

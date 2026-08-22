@@ -21,63 +21,69 @@ public class VectorSearchService {
     private EntityManager entityManager;
 
     /**
-     * Search for chunks similar to a query embedding within a specific PDF.
-     * NOTE: pgvector extension is not installed; returns chunks ordered by chunk_index as fallback.
+     * Semantic search for chunks similar to a query embedding within a specific PDF.
+     * Uses pgvector cosine distance (<=>) so results are ranked by true semantic similarity:
+     * similarity = 1 - cosine_distance(embedding, query_embedding).
+     * The stored embedding column holds pgvector text literals ("[0.12,-0.34,...]"), which
+     * Postgres casts to the vector type at query time (::vector), so no row migration is needed.
      */
     public List<SearchResult> searchByPdfId(Long pdfId, float[] queryEmbedding, int topK) {
-        logger.info("Vector search in PDF " + pdfId + " for top " + topK + " results (pgvector not available - returning sequential chunks)");
-
-        try {
-            // Fallback: return recent chunks when pgvector is not available
-            String sql = """
-                SELECT id, pdf_id, chunk_index, chunk_text, token_count, page_number, created_at,
-                       0.0 AS similarity
-                FROM document_chunks
-                WHERE pdf_id = :pdfId
-                ORDER BY chunk_index
-                LIMIT :topK
-                """;
-
-            var query = entityManager.createNativeQuery(sql, Object[].class);
-            query.setParameter("pdfId", pdfId);
-            query.setParameter("topK", topK);
-
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = query.getResultList();
-            return mapResults(rows);
-        } catch (Exception e) {
-            logger.warning("Vector search failed (pgvector not installed): " + e.getMessage());
+        if (queryEmbedding == null) {
             return List.of();
         }
+        String vectorLiteral = toVectorLiteral(queryEmbedding);
+
+        // Positional parameters (?1/?2/?3) + explicit CAST(): Hibernate 6 mis-parses named
+        // parameters when native SQL also contains PostgreSQL "::" casts, sending a raw ":"
+        // to the server ("syntax error at or near ':'").
+        String sql = """
+                SELECT id, pdf_id, chunk_index, chunk_text, token_count, page_number, created_at,
+                       1 - (CAST(embedding AS vector) <=> CAST(?2 AS vector)) AS similarity
+                FROM document_chunks
+                WHERE pdf_id = ?1
+                ORDER BY CAST(embedding AS vector) <=> CAST(?2 AS vector)
+                LIMIT ?3
+                """;
+
+        return runQuery(sql, pdfId, vectorLiteral, topK);
     }
 
     /**
-     * Search for chunks similar to a query embedding across all PDFs for a user.
-     * NOTE: pgvector extension is not installed; returns chunks ordered by chunk_index as fallback.
+     * Semantic search for chunks similar to a query embedding across all PDFs owned by a user.
+     * Joins pdf_documents so a user can never retrieve chunks from another user's PDFs.
      */
     public List<SearchResult> searchByUserId(Long userId, float[] queryEmbedding, int topK) {
-        logger.info("Vector search for user " + userId + " for top " + topK + " results (pgvector not available - returning sequential chunks)");
+        if (queryEmbedding == null) {
+            return List.of();
+        }
+        String vectorLiteral = toVectorLiteral(queryEmbedding);
 
-        try {
-            String sql = """
+        String sql = """
                 SELECT dc.id, dc.pdf_id, dc.chunk_index, dc.chunk_text, dc.token_count, dc.page_number, dc.created_at,
-                       0.0 AS similarity
+                       1 - (CAST(dc.embedding AS vector) <=> CAST(?2 AS vector)) AS similarity
                 FROM document_chunks dc
                 JOIN pdf_documents pd ON pd.id = dc.pdf_id
-                WHERE pd.user_id = :userId
-                ORDER BY dc.pdf_id, dc.chunk_index
-                LIMIT :topK
+                WHERE pd.user_id = ?1
+                ORDER BY CAST(dc.embedding AS vector) <=> CAST(?2 AS vector)
+                LIMIT ?3
                 """;
 
+        return runQuery(sql, userId, vectorLiteral, topK);
+    }
+
+    private List<SearchResult> runQuery(String sql, Long scopeValue,
+                                        String vectorLiteral, int topK) {
+        try {
             var query = entityManager.createNativeQuery(sql, Object[].class);
-            query.setParameter("userId", userId);
-            query.setParameter("topK", topK);
+            query.setParameter(1, scopeValue);
+            query.setParameter(2, vectorLiteral);
+            query.setParameter(3, topK);
 
             @SuppressWarnings("unchecked")
             List<Object[]> rows = query.getResultList();
             return mapResults(rows);
         } catch (Exception e) {
-            logger.warning("Vector search failed (pgvector not installed): " + e.getMessage());
+            logger.warning("Vector search failed: " + e.getMessage());
             return List.of();
         }
     }

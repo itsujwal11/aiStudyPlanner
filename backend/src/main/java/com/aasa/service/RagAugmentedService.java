@@ -25,7 +25,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -35,6 +37,8 @@ public class RagAugmentedService {
     private static final Logger logger = Logger.getLogger(RagAugmentedService.class.getName());
 
     private static final int TOP_K_CHUNKS = 5;
+    private static final int TOP_K_CANDIDATES = 20;   // wide retrieval pool before reranking
+    private static final int QUIZ_CONTEXT_CHUNKS = 8; // reranked context size for quiz generation
     private static final int MAX_OVERVIEW_CHUNKS = 12;
     private static final int MAX_PREDEFINED_TOPICS = 20;
     private static final int TIMEOUT_SECONDS = 120;
@@ -53,6 +57,9 @@ public class RagAugmentedService {
 
     @Autowired
     private VectorSearchService vectorSearchService;
+
+    @Autowired
+    private RerankingService rerankingService;
 
     @Autowired
     private DocumentChunkRepository documentChunkRepository;
@@ -107,9 +114,10 @@ public class RagAugmentedService {
                         .build();
             }
 
+            // Retrieve a generous candidate pool; hybrid reranking selects the final context below.
             searchResults = pdfId != null
-                    ? vectorSearchService.searchByPdfId(pdfId, queryEmbedding, TOP_K_CHUNKS)
-                    : vectorSearchService.searchByUserId(user.getId(), queryEmbedding, TOP_K_CHUNKS);
+                    ? vectorSearchService.searchByPdfId(pdfId, queryEmbedding, TOP_K_CANDIDATES)
+                    : vectorSearchService.searchByUserId(user.getId(), queryEmbedding, TOP_K_CANDIDATES);
         }
 
         if (searchResults.isEmpty()) {
@@ -120,7 +128,30 @@ public class RagAugmentedService {
                     .build();
         }
 
-        // 3. Build context from chunks
+        // 3. Hybrid reranking: vector similarity alone is not enough — combine it with keyword
+        //    overlap and title match, then keep only the top chunks for grounded generation.
+        Map<Long, Double> rerankScores = new HashMap<>();
+        Map<Long, Integer> retrievalRanks = new HashMap<>();
+        if (!isOverviewQuestion(question)) {
+            String title = selectedPdf != null && selectedPdf.getFileName() != null
+                    ? selectedPdf.getFileName()
+                    : "";
+            List<RerankingService.RerankedResult> reranked = rerankingService.rerank(
+                    question, title, searchResults, TOP_K_CHUNKS);
+            if (!reranked.isEmpty()) {
+                searchResults = reranked.stream()
+                        .map(r -> r.searchResult)
+                        .collect(Collectors.toList());
+                for (RerankingService.RerankedResult r : reranked) {
+                    rerankScores.put(r.searchResult.id, r.rerankScore);
+                    retrievalRanks.put(r.searchResult.id, r.retrievalRank);
+                }
+                logger.info("Reranking kept " + reranked.size() + " of "
+                        + reranked.get(0).retrievalRank + "+ retrieved chunks");
+            }
+        }
+
+        // 4. Build context from chunks
         StringBuilder context = new StringBuilder();
         List<RagChunkSource> sources = new ArrayList<>();
 
@@ -147,6 +178,9 @@ public class RagAugmentedService {
                     .text(sr.chunkText.length() > 200 ? sr.chunkText.substring(0, 200) + "..." : sr.chunkText)
                     .pageNumber(sr.pageNumber)
                     .similarity(sr.similarity)
+                    .rerankScore(rerankScores.get(sr.id))
+                    .rank(i + 1)
+                    .retrievalRank(retrievalRanks.get(sr.id))
                     .pdfFileName(pdfFileName)
                     .build());
         }
@@ -286,7 +320,18 @@ public class RagAugmentedService {
             logger.warning("Could not generate an embedding for quiz context");
             return null;
         }
-        List<VectorSearchService.SearchResult> results = vectorSearchService.searchByPdfId(pdfId, topicEmbedding, 8);
+        // Retrieve a wide candidate pool, then hybrid-rerank down to the best quiz-context chunks.
+        List<VectorSearchService.SearchResult> candidates =
+                vectorSearchService.searchByPdfId(pdfId, topicEmbedding, TOP_K_CANDIDATES);
+
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        List<VectorSearchService.SearchResult> results = rerankingService.rerank(
+                        topicTitle, topicTitle, candidates, QUIZ_CONTEXT_CHUNKS).stream()
+                .map(r -> r.searchResult)
+                .collect(Collectors.toList());
 
         if (results.isEmpty()) {
             return null;
@@ -352,14 +397,17 @@ public class RagAugmentedService {
     }
 
     private String buildRagPrompt(String question, String context) {
-        return "You are an AI study assistant helping a student understand their course material. " +
-               "Answer the following question based ONLY on the provided context from their study documents. " +
-               "If the context doesn't contain enough information to answer, say so clearly. " +
-               "For summaries, organize the answer by the major topics visible across the context. " +
-               "Use short [Source N] citations where helpful, but do not add a Sources section because the interface displays sources separately.\n\n" +
+        return "You are an AI study assistant helping a student understand their course material.\n\n" +
+               "RULES:\n" +
+               "1. Answer using ONLY the [Source 1] ... [Source N] blocks provided in CONTEXT below.\n" +
+               "2. Do NOT invent facts, examples, numbers, or terms that are not present in CONTEXT.\n" +
+               "3. If CONTEXT does not contain enough information to answer, reply exactly: 'The provided study material does not contain enough information to answer this.'\n" +
+               "4. Cite EVERY factual statement with an inline marker such as [Source 1] or [Source 2].\n" +
+               "5. Do NOT add a Sources section at the end; the interface displays sources separately.\n" +
+               "6. For summaries or overviews, organize the answer by the major topics visible across CONTEXT.\n\n" +
                "CONTEXT:\n" + context + "\n\n" +
                "QUESTION: " + question + "\n\n" +
-               "Provide a clear, educational answer based on the context above.";
+               "Provide a clear, educational answer following all rules above.";
     }
 
     private String callGeminiWithContext(String prompt) {

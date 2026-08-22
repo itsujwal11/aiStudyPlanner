@@ -30,6 +30,9 @@ public class MasteryService {
     @Autowired
     private ReviewLogRepository reviewLogRepository;
 
+    private final BayesianKnowledgeTracingService knowledgeTracingService =
+            new BayesianKnowledgeTracingService();
+
     @Transactional
     public SpacedRepetitionResult updateAfterAttempt(
             User user, Topic topic, StudyProgress progress,
@@ -38,7 +41,12 @@ public class MasteryService {
         int sm2Quality = mapToSm2Quality(isCorrect, timeTakenSeconds);
         double masteryBefore = progress.getMasteryLevel() != null ? progress.getMasteryLevel() : 0.0;
 
-        double newMastery = updateBayesianMastery(progress, isCorrect, timeTakenSeconds);
+        // Two estimators are combined on every attempt:
+        // 1) Beta-Binomial posterior — accumulates raw success/failure evidence (alpha/beta)
+        // 2) Bayesian Knowledge Tracing — models guess/slip noise explicitly
+        double betaBinomialMastery = updateBayesianMastery(progress, isCorrect, timeTakenSeconds);
+        double bktMastery = knowledgeTracingService.updateMastery(masteryBefore, isCorrect);
+        double newMastery = clamp01(0.5 * betaBinomialMastery + 0.5 * bktMastery);
         SM2Result sm2 = applySm2(progress, sm2Quality);
         int rating = mapQualityToRating(sm2Quality);
 
@@ -134,6 +142,15 @@ public class MasteryService {
     public double predictedRetention(double mastery, double daysSinceReview) {
         double decayRate = 0.5 * (1 - mastery * 0.7);
         return mastery * Math.exp(-decayRate * daysSinceReview);
+    }
+
+    /** Exponential forgetting-curve risk from the BKT model (1 - e^(-lambda*days)). */
+    public double forgettingRisk(double mastery, long daysSinceReview) {
+        return knowledgeTracingService.forgettingRisk(mastery, daysSinceReview);
+    }
+
+    private double clamp01(double v) {
+        return v < 0.0 ? 0.0 : Math.min(v, 1.0);
     }
 
     private static class SM2Result {

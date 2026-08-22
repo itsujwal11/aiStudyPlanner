@@ -20,6 +20,7 @@ import { Reports } from './pages/Reports'
 import { Planner } from './pages/Planner'
 import { Admin } from './pages/Admin'
 import { QuickAnswers } from './pages/QuickAnswers'
+import { AiChat } from './pages/AiChat'
 import { DiagnosticReminder } from './components/DiagnosticReminder'
 import './index.css'
 
@@ -60,7 +61,7 @@ function AppRoutes() {
       <Route path="/reports" element={<ProtectedRoute><PageLayout><Reports /></PageLayout></ProtectedRoute>} />
       <Route path="/planner" element={<ProtectedRoute><PageLayout><Planner /></PageLayout></ProtectedRoute>} />
       <Route path="/quick-answers" element={<ProtectedRoute><PageLayout><QuickAnswers /></PageLayout></ProtectedRoute>} />
-      <Route path="/ai-chat" element={<Navigate to="/quick-answers" replace />} />
+      <Route path="/ai-chat" element={<ProtectedRoute><PageLayout><AiChat /></PageLayout></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute><PageLayout><Admin /></PageLayout></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
     </Routes>

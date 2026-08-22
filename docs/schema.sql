@@ -1,5 +1,5 @@
--- Enable pgvector extension (SKIPPED - install separately)
--- CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector extension (required for semantic vector search; install the pgvector package once)
+CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Users table
 CREATE TABLE users (
@@ -69,15 +69,23 @@ CREATE TABLE study_progress (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     topic_id BIGINT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-    weakness_level VARCHAR(50),
+    weakness_level VARCHAR(50) CHECK (weakness_level IN ('LOW', 'MEDIUM', 'HIGH', 'NOT_ATTEMPTED', 'INSUFFICIENT_DATA')),
     completion_percentage DOUBLE PRECISION DEFAULT 0.0,
     best_score DOUBLE PRECISION DEFAULT 0.0,
     total_attempts INTEGER DEFAULT 0,
     correct_attempts INTEGER DEFAULT 0,
+    mastery_level DOUBLE PRECISION DEFAULT 0.0,
+    alpha DOUBLE PRECISION DEFAULT 1.0,
+    beta DOUBLE PRECISION DEFAULT 1.0,
+    last_study_date DATE,
+    next_review_date DATE,
+    interval_days INTEGER DEFAULT 0,
+    ease_factor DOUBLE PRECISION DEFAULT 2.5,
     UNIQUE(user_id, topic_id)
 );
 
--- Document Chunks table (for RAG - without pgvector)
+-- Document Chunks table (RAG index; 'embedding' stores pgvector text literals "[v1,v2,...]"
+-- which are cast to the vector type at query time via embedding::vector)
 CREATE TABLE document_chunks (
     id BIGSERIAL PRIMARY KEY,
     pdf_id BIGINT NOT NULL REFERENCES pdf_documents(id) ON DELETE CASCADE,
@@ -99,7 +107,8 @@ CREATE INDEX idx_progress_user ON study_progress(user_id);
 CREATE INDEX idx_progress_topic ON study_progress(topic_id);
 CREATE INDEX idx_user_email ON users(email);
 CREATE INDEX idx_chunk_pdf ON document_chunks(pdf_id);
--- SKIP: ivfflat index requires pgvector extension
--- CREATE INDEX idx_chunk_embedding ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Optional ANN speed-up once the column is migrated to a native vector type:
+-- ALTER TABLE document_chunks ALTER COLUMN embedding TYPE vector(768) USING embedding::vector;
+-- CREATE INDEX idx_chunk_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops);
 CREATE UNIQUE INDEX uq_document_chunks_pdf_chunk_index
     ON document_chunks(pdf_id, chunk_index);

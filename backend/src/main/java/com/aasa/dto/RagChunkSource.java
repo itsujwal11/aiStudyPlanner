@@ -15,6 +15,9 @@ public class RagChunkSource {
     private Integer chunkIndex;
     private String text;
     private Integer pageNumber;
-    private Double similarity;
+    private Double similarity;    // raw cosine similarity from pgvector retrieval
+    private Double rerankScore;   // hybrid reranker score (vector + keyword + title)
+    private Integer rank;         // final position after reranking (1 = best)
+    private Integer retrievalRank; // position in the raw vector-search results before reranking
     private String pdfFileName;
 }

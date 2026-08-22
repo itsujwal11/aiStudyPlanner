@@ -3,7 +3,7 @@ package com.aasa.controller;
 import com.aasa.dto.TopicDto;
 import com.aasa.dto.WeaknessUpdateRequest;
 import com.aasa.entity.PdfDocument;
-import com.aasa.service.ScoringEngineService;
+import com.aasa.service.AdaptivePriorityService;
 import com.aasa.entity.Topic;
 import com.aasa.service.PdfManagementService;
 import com.aasa.service.TopicAnalysisService;
@@ -33,7 +33,7 @@ public class TopicController {
     @Autowired private PdfManagementService  pdfManagementService;
     @Autowired private AuthService           authService;
     @Autowired
-    private ScoringEngineService scoringEngineService;
+    private AdaptivePriorityService adaptivePriorityService;
 
     @PostMapping("/analyze/{pdfId}")
     public ResponseEntity<?> analyzePdf(@PathVariable Long pdfId) {
@@ -138,12 +138,13 @@ public class TopicController {
             Topic topic = topicAnalysisService.getTopicById(topicId);
             topic.setWeaknessScore(request.getWeakness());
 
-            long daysUntilExam = ChronoUnit.DAYS.between(LocalDate.now(), topic.getPdfDocument().getExamDate());
-            Double newPriority = scoringEngineService.calculatePriorityScore(
-                    topic.getComplexityScore(),
-                    topic.getImportanceScore(),
+            // Adaptive priority: manual weakness maps to a mastery estimate; forgetting risk
+            // starts neutral because this path carries no revision timestamp.
+            Double newPriority = adaptivePriorityService.calculatePriorityFromWeakness(
                     request.getWeakness(),
-                    (int) daysUntilExam
+                    topic.getImportanceScore(),
+                    topic.getPdfDocument().getExamDate(),
+                    null
             );
 
             topic.setPriorityScore(newPriority);

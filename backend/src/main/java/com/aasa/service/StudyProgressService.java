@@ -42,7 +42,7 @@ public class StudyProgressService {
     private WeaknessEngineService weaknessEngineService;
 
     @Autowired
-    private ScoringEngineService scoringEngineService;
+    private AdaptivePriorityService adaptivePriorityService;
 
     @Autowired
     private MasteryService masteryService;
@@ -119,20 +119,26 @@ public class StudyProgressService {
 
             if (progress != null) {
                 PdfDocument pdf = topic.getPdfDocument();
-                long daysUntilExam = ChronoUnit.DAYS.between(LocalDate.now(), pdf.getExamDate());
 
                 Double weaknessScore = topic.getWeaknessScore() != null
                         ? topic.getWeaknessScore()
                         : weaknessEngineService.getWeaknessScore(progress.getWeaknessLevel());
 
-                Double priorityScore = scoringEngineService.calculatePriorityScore(
-                        topic.getComplexityScore(),
+                // Adaptive priority from real learner evidence:
+                // BKT mastery gap + forgetting risk since last revision + exam urgency + importance.
+                double mastery = progress.getMasteryLevel() != null
+                        ? progress.getMasteryLevel()
+                        : 1.0 - weaknessScore;
+
+                Double priorityScore = adaptivePriorityService.calculatePriority(
+                        mastery,
                         topic.getImportanceScore(),
-                        weaknessScore,
-                        (int) daysUntilExam
+                        pdf.getExamDate(),
+                        progress.getLastStudyDate()
                 );
 
-                logger.info("Topic: " + topic.getTitle() + " - Weakness: " + weaknessScore + ", Priority: " + priorityScore + ", Days: " + daysUntilExam);
+                logger.info("Topic: " + topic.getTitle() + " - Mastery: " + mastery
+                        + ", Weakness: " + weaknessScore + ", Priority: " + priorityScore);
 
                 // Update both the specific weakness score and the priority on the topic for UI consistency
                 topic.setWeaknessScore(weaknessScore);

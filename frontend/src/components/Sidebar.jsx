@@ -4,13 +4,14 @@ import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LogOut, LayoutDashboard, Database, Upload, BookOpen, LineChart,
-  FileText, User, Menu, X, HelpCircle, Target
+  FileText, User, Menu, X, HelpCircle, Target, MessageSquare
 } from 'lucide-react'
 
 const userNav = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/upload', label: 'Upload', icon: Upload },
   { path: '/study', label: 'Study', icon: BookOpen },
+  { path: '/ai-chat', label: 'AI Chat', icon: MessageSquare },
   { path: '/quick-answers', label: 'Quick Answers', icon: HelpCircle },
   { path: '/practice', label: 'Practice', icon: Target },
   { path: '/analytics', label: 'Analytics', icon: LineChart },

@@ -38,7 +38,7 @@ public class PlannerService {
     private WeaknessEngineService weaknessEngineService;
 
     @Autowired
-    private ScoringEngineService scoringEngineService;
+    private AdaptivePriorityService adaptivePriorityService;
 
     public PlannerDto generatePlanner(User user) {
         logger.info("Generating planner for user ID: " + user.getId());
@@ -138,10 +138,14 @@ public class PlannerService {
 
         double importance = topic.getImportanceScore() != null ? topic.getImportanceScore() : 0.5;
         double complexity = topic.getComplexityScore() != null ? topic.getComplexityScore() : 0.5;
-        double priorityScore = scoringEngineService.calculatePriorityScore(
-                complexity, importance, weaknessScore, daysUntilExam);
 
-        // Priority = (Weakness × Importance × Difficulty) / (Mastery + 0.1)
+        // Adaptive priority from real learner evidence: BKT mastery gap + forgetting risk
+        // since the last revision + exam urgency + AI-assessed topic importance.
+        LocalDate examDate = topic.getPdfDocument() != null ? topic.getPdfDocument().getExamDate() : null;
+        LocalDate lastStudyDate = progress != null ? progress.getLastStudyDate() : null;
+        double masteryProbability = masteryLevel / 100.0;
+        double priorityScore = adaptivePriorityService.calculatePriority(
+                masteryProbability, importance, examDate, lastStudyDate);
 
         String whyImportant = describeImportance(importance, complexity, weaknessScore);
         String recommendedDuration = estimateDuration(complexity, weaknessScore);

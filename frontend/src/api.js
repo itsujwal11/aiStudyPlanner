@@ -114,6 +114,8 @@ export const reportAPI = {
 export const ragAPI = {
   getPredefinedAnswers: (pdfId) =>
     api.get('/rag/predefined', { params: pdfId ? { pdfId } : {} }),
+  // Full RAG pipeline: retrieve → rerank → grounded answer with sources
+  ask: (question, pdfId) => api.post('/rag/ask', { question, pdfId: pdfId ?? null }),
 };
 
 export const adminAPI = {

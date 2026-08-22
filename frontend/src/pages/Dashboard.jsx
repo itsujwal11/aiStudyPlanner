@@ -120,13 +120,21 @@ export const Dashboard = () => {
   }
 
 
-  useEffect(() => {
+useEffect(() => {
     const isProcessing = pdfs.some((pdf) => ['PENDING', 'PROCESSING'].includes(pdf.processingStatus))
     if (!isProcessing) return undefined
 
-    const timer = window.setTimeout(fetchDashboard, 3000)
-    return () => window.clearTimeout(timer)
-  }, [pdfs])
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchDashboard()
+    }
+
+    // Refetch only when tab becomes visible (user returns to page)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pdfs, fetchDashboard])
 
   if (isAdmin) return <AdminDashboard />
   const processingPdfs = pdfs.filter((pdf) => ['PENDING', 'PROCESSING'].includes(pdf.processingStatus))
