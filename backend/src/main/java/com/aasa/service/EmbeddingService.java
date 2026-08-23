@@ -21,7 +21,7 @@ public class EmbeddingService {
 
     private static final Logger logger = Logger.getLogger(EmbeddingService.class.getName());
 
-    private static final String EMBEDDING_MODEL = "gemini-embedding-2";
+    private static final String EMBEDDING_MODEL = "gemini-embedding-001";
     private static final String EMBEDDING_ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/"
                     + EMBEDDING_MODEL + ":batchEmbedContents";

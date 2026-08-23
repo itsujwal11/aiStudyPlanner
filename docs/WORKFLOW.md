@@ -27,7 +27,7 @@ flowchart LR
     end
 
     subgraph External["External AI APIs - Google Gemini"]
-        EMB[gemini-embedding model<br/>768-dim vectors]
+        EMB[gemini-embedding-001<br/>768-dim vectors]
         LLM[gemini-2.5-flash etc.<br/>analysis + answers]
     end
 
@@ -56,23 +56,27 @@ This runs **asynchronously** right after upload, so the user never waits.
 
 ```mermaid
 flowchart TD
-    A[User uploads PDF] --> B[PdfManagementController<br/>POST /api/pdf/upload]
+    A[User uploads PDF] --> B[PdfController<br/>POST /api/pdfs/upload]
     B --> C[Save file + extract text<br/>PDFBox - full text layer]
-    C --> D[Status = PROCESSING<br/>return response immediately]
-    D --> E["PdfProcessingService.processAsync()<br/>@Async background thread"]
+    C --> D[Status = PENDING<br/>return response immediately]
+    D --> E["PdfProcessingService.processAsync()<br/>@Async background thread<br/>Status = PROCESSING"]
 
-    E --> F["STEP 1 - NLP topic extraction<br/>GeminiAiService.analyzeContent()"]
-    F --> G1["Gemini returns structured JSON:<br/>topics + description + importance + complexity<br/>+ semantic signals + quiz questions"]
-    G1 --> H[Create Topic rows]
-
-    E --> I["STEP 2 - Chunking<br/>TextChunkingService.chunkDocument()"]
+    E --> I["STEP 1 - Chunking<br/>TextChunkingService.chunkDocument()<br/>(via RagAugmentedService.reprocessPdfForRag)"]
     I --> J[~512-token chunks with overlap,<br/>broken at paragraph/sentence boundaries]
-    J --> K["STEP 3 - Embedding<br/>EmbeddingService.generateEmbeddings()"]
-    K --> L[Batches of 20 chunks -><br/>768-float vectors per chunk]
-    L --> M["STEP 4 - Persist<br/>document_chunks rows:<br/>text + page + embedding text literal"]
-    H --> N[Save quizzes per topic]
-    M --> O[Status = COMPLETED<br/>PDF ready for RAG + study]
+    J --> K["STEP 2 - Embedding<br/>EmbeddingService.generateEmbeddings()"]
+    K --> L[Batches of 20 chunks -><br/>768-float vectors per chunk, gemini-embedding-001]
+    L --> M["STEP 3 - Persist<br/>document_chunks rows replaced atomically:<br/>text + page + embedding text literal"]
+
+    M --> F["STEP 4 - NLP topic extraction<br/>GeminiAiService.analyzeContent()<br/>(via TopicAnalysisService)"]
+    F --> G1["Gemini returns structured JSON:<br/>topics + description + importance + complexity<br/>+ semantic signals + quiz questions"]
+    G1 --> H[Create Topic rows + save quizzes per topic]
+    H --> O[Status = COMPLETED<br/>PDF ready for RAG + study]
 ```
+
+Chunking and embedding run **before** topic extraction (both live inside the same
+`processAsync()` call, sequentially, not in parallel) — so the RAG index exists as soon as
+processing finishes, and a student can start asking questions in AI Chat without waiting for
+topic/quiz generation to also complete.
 
 ### 2.1 Where the NLP is here
 
@@ -125,7 +129,7 @@ are two texts?" becomes simple vector math (cosine distance).
 
 Key implementation facts (all real code):
 
-- **Model:** Gemini embedding API, **768 dimensions** per vector.
+- **Model:** `gemini-embedding-001`, **768 dimensions** per vector (via `outputDimensionality`).
 - **Asymmetric retrieval prefixes** — queries and documents are formatted differently,
   which measurably improves retrieval quality:
   - question → `"task: question answering | query: <text>"`

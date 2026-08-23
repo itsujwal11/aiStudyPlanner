@@ -10,6 +10,14 @@ import { BookOpen, AlertCircle, CheckCircle, XCircle, ArrowRight, BarChart3, Arr
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
 const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
 
+// Some AI-generated options already come back with their own "A) "/"(A)" label baked in.
+// Strip it for display only — the underlying option text is still what gets submitted/compared.
+const stripOptionPrefix = (text) =>
+  typeof text === 'string' ? text.replace(/^(?:[A-Da-d][.):]|\([A-Da-d]\))\s+/, '').trim() : text
+
+const sameAnswer = (a, b) =>
+  typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase()
+
 export const Study = ({ mode = 'practice' }) => {
   const { pdfId } = useParams()
   const [searchParams] = useSearchParams()
@@ -236,8 +244,8 @@ export const Study = ({ mode = 'practice' }) => {
 
       {/* Header */}
       <motion.div variants={item} className="glass-pane rounded-xl p-6 border border-black/8">
-        <div className="flex items-center justify-between mb-3">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-on-surface">{mode === 'diagnostic' ? 'Diagnostic Quiz' : 'Practice Session'}</h1>
             <p className="text-sm text-on-surface-variant/70">
               {resumedCount > 0
@@ -247,7 +255,7 @@ export const Study = ({ mode = 'practice' }) => {
                   : 'Practise weak topics and keep your mastery estimate current.'}
             </p>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right flex-shrink-0">
             <p className="text-sm text-on-surface-variant/70">Question {currentGlobalQuizIndex + 1} of {allQuizzes.length}</p>
             <p className="text-primary font-semibold">{accuracy}% Accuracy</p>
           </div>
@@ -280,9 +288,9 @@ export const Study = ({ mode = 'practice' }) => {
                   ).length
                   return (
                     <div key={topic.id} className="bg-white/40 backdrop-blur-sm border border-black/8 rounded-xl p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-semibold text-on-surface text-sm flex-1">{topic.title}</h3>
-                        <span className="text-xs px-2 py-1 rounded-lg bg-primary/10 text-primary font-semibold flex-shrink-0 ml-2">{topicQuizzes.length}Q</span>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="font-semibold text-on-surface text-sm flex-1 min-w-0 break-words">{topic.title}</h3>
+                        <span className="text-xs px-2 py-1 rounded-lg bg-primary/10 text-primary font-semibold flex-shrink-0">{topicQuizzes.length}Q</span>
                       </div>
                       <div className="space-y-1.5 text-xs">
                         <div className="flex justify-between">
@@ -355,17 +363,17 @@ export const Study = ({ mode = 'practice' }) => {
               transition={{ duration: 0.25 }}
             >
               <div className="glass-pane rounded-xl p-8 border border-black/8">
-                <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/20">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-6 border-b border-white/20">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <BookOpen className="w-5 h-5 text-primary" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-on-surface-variant/70 text-sm">Topic</p>
-                      <p className="text-on-surface font-semibold">{currentTopic?.title || 'Loading...'}</p>
+                      <p className="text-on-surface font-semibold break-words">{currentTopic?.title || 'Loading...'}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="sm:text-right flex-shrink-0">
                     <p className="text-on-surface-variant/70 text-sm">Difficulty</p>
                     <p className={`font-semibold text-sm ${
                       currentQuiz.difficulty?.toUpperCase() === 'HARD' ? 'text-error' :
@@ -386,7 +394,7 @@ export const Study = ({ mode = 'practice' }) => {
                       { label: 'D', value: currentQuiz.optionD },
                     ].map((option) => {
                       const isSelected = selectedAnswer === option.value
-                      const isCorrect = result?.correctAnswer === option.value
+                      const isCorrect = sameAnswer(result?.correctAnswer, option.value)
                       const isUserWrong = submitted && selectedAnswer === option.value && !result?.isCorrect
                       return (
                         <label
@@ -405,8 +413,8 @@ export const Study = ({ mode = 'practice' }) => {
                           }`}>
                             {isSelected && <div className="w-2.5 h-2.5 bg-primary rounded-full" />}
                           </div>
-                          <div className="ml-3 flex-1">
-                            <p className="font-semibold text-on-surface">{option.label}. {option.value}</p>
+                          <div className="ml-3 flex-1 min-w-0">
+                            <p className="font-semibold text-on-surface break-words">{option.label}. {stripOptionPrefix(option.value)}</p>
                           </div>
                           {submitted && isCorrect && <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />}
                           {submitted && isUserWrong && <XCircle className="w-5 h-5 text-error flex-shrink-0" />}

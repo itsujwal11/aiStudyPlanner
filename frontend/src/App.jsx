@@ -22,6 +22,7 @@ import { Admin } from './pages/Admin'
 import { QuickAnswers } from './pages/QuickAnswers'
 import { AiChat } from './pages/AiChat'
 import { DiagnosticReminder } from './components/DiagnosticReminder'
+import { BackgroundProcessingWatcher } from './hooks/useBackgroundProcessingNotifications'
 import './index.css'
 
 function PageLayout({ children }) {
@@ -87,6 +88,7 @@ function App() {
           success: { iconTheme: { primary: '#0058bc', secondary: '#fff' } },
           error: { iconTheme: { primary: '#ba1a1a', secondary: '#fff' } },
         }} />
+        <BackgroundProcessingWatcher />
         <AppRoutes />
       </AuthProvider>
     </Router>

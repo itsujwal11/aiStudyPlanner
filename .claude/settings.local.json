@@ -39,7 +39,8 @@
       "Bash(Stop-Process -Id 6152 -Force)",
       "Bash(kill -9 26176)",
       "Bash(pkill *)",
-      "Bash(taskkill *)"
+      "Bash(taskkill *)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

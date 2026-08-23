@@ -44,7 +44,7 @@ flowchart TB
 | Stage | Implementation | File |
 |---|---|---|
 | PDF ingestion & chunking | text extraction, semantic chunks | `TextChunkingService`, `PdfManagementService` |
-| Embeddings | Gemini `embedding-001`, 768-dim | `EmbeddingService` |
+| Embeddings | Gemini `gemini-embedding-001`, 768-dim | `EmbeddingService` |
 | Vector store | Postgres + pgvector, cosine distance `<=>` | `VectorSearchService`, `docs/schema.sql` |
 | Retrieval | top-20 candidate pool per query | `RagAugmentedService.answerQuestion` |
 | Reranking | hybrid vector/keyword/title scoring, top-5 kept | `RerankingService` |
@@ -65,3 +65,23 @@ flowchart TB
 - **Generation is grounded in retrieved evidence**: only the top-5 reranked chunks are
   sent to the LLM, citations `[Source N]` are mandatory, and the UI exposes the exact
   source pages with their retrieval and rerank scores — making answers auditable.
+
+## Background processing & user notifications
+
+PDF analysis is intentionally asynchronous so uploads stay fast:
+
+1. `POST /api/pdfs/upload` stores the file, creates a `PENDING` record, and returns immediately.
+2. `PdfProcessingService.processAsync` (Spring `@Async("pdfProcessingExecutor")`) runs
+   extraction → chunking → embedding → AI topic/quiz analysis, updating
+   `processingStatus`: `PENDING → PROCESSING → COMPLETED | FAILED`.
+3. The frontend mounts one global watcher, `BackgroundProcessingWatcher`
+   (`frontend/src/hooks/useBackgroundProcessingNotifications.js`), inside `AuthProvider`.
+   It polls the existing lightweight `GET /api/pdfs` list every 5 s, diffs each poll
+   against the previous snapshot, and fires:
+   - an in-app toast when any PDF transitions `PROCESSING/PENDING → COMPLETED`
+     ("is ready — N topics generated") or `→ FAILED` (with the stored error reason);
+   - a desktop notification via the Notification API **only while the tab is hidden**,
+     so the user learns about completion even on another tab (no duplicate spam when focused).
+4. Polling pauses while the tab is hidden and refreshes instantly on return; the first
+   fetch only seeds state, so pre-existing documents never trigger stale notifications.
+

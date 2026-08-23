@@ -41,8 +41,8 @@ export const UploadPdf = () => {
       setProgress({ stage: 'Upload complete. AI processing continues in the background.', percentage: 100 })
       setFile(null)
       setExamDate('')
-      setSuccess('PDF uploaded. You can leave this page while topics and quizzes are generated.')
-      toast.success('PDF uploaded. Processing in background.')
+      setSuccess('PDF uploaded. AI analysis runs in the background - you will receive a notification here as soon as your topics and quizzes are ready.')
+      toast.success('Uploaded! We will notify you when analysis finishes.')
 
       setTimeout(() => {
         setProgress({ stage: '', percentage: 0 })

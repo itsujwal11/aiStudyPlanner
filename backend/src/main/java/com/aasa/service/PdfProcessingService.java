@@ -16,15 +16,18 @@ public class PdfProcessingService {
     private final PdfDocumentRepository pdfDocumentRepository;
     private final PdfProcessingStateService stateService;
     private final TopicAnalysisService topicAnalysisService;
+    private final RagAugmentedService ragAugmentedService;
 
     public PdfProcessingService(
             PdfDocumentRepository pdfDocumentRepository,
             PdfProcessingStateService stateService,
-            TopicAnalysisService topicAnalysisService
+            TopicAnalysisService topicAnalysisService,
+            RagAugmentedService ragAugmentedService
     ) {
         this.pdfDocumentRepository = pdfDocumentRepository;
         this.stateService = stateService;
         this.topicAnalysisService = topicAnalysisService;
+        this.ragAugmentedService = ragAugmentedService;
     }
 
     @Async("pdfProcessingExecutor")
@@ -34,6 +37,12 @@ public class PdfProcessingService {
         try {
             PdfDocument pdf = pdfDocumentRepository.findById(pdfId)
                     .orElseThrow(() -> new IllegalStateException("PDF was deleted"));
+
+            // RAG pipeline first (chunking + embedding) so the AI Chat / Quick Answers
+            // index exists as soon as processing completes, matching the documented
+            // extraction -> chunking -> embedding -> AI topic/quiz analysis order.
+            ragAugmentedService.reprocessPdfForRag(pdf);
+
             List<Topic> topics = topicAnalysisService.analyzeAndCreateTopics(pdf);
             if (topics.isEmpty()) throw new IllegalStateException("AI analysis returned no topics");
 
