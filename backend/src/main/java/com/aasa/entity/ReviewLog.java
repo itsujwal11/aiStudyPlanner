@@ -47,4 +47,12 @@ public class ReviewLog {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    /** Fallback timestamp so every review row carries its creation time. */
+    @PrePersist
+    void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }

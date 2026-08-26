@@ -15,7 +15,6 @@ const userNav = [
   { path: '/quick-answers', label: 'Quick Answers', icon: HelpCircle },
   { path: '/practice', label: 'Practice', icon: Target },
   { path: '/analytics', label: 'Analytics', icon: LineChart },
-  // { path: '/flashcards', label: 'Flashcards', icon: Brain },
   { path: '/planner', label: 'Planner', icon: FileText },
   { path: '/profile', label: 'Profile', icon: User },
 ]

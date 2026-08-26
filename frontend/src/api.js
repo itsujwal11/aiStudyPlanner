@@ -40,7 +40,6 @@ export const authAPI = {
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
   resetPassword: (data) => api.post('/auth/reset-password', data),
   google: (data) => api.post('/auth/google', data),
-  seedAdmin: () => api.post('/auth/seed-admin'),
 }
 
 export const pdfAPI = {
@@ -56,6 +55,7 @@ export const pdfAPI = {
   getById: (pdfId) => api.get(`/pdfs/${pdfId}`),
   getDetail: (pdfId) => api.get(`/pdfs/${pdfId}/detail`),
   delete: (pdfId) => api.delete(`/pdfs/${pdfId}`),
+  updateExamDate: (pdfId, examDate) => api.put(`/pdfs/${pdfId}/exam-date`, { examDate }),
   reset: () => api.delete('/pdfs/reset'),
 }
 
@@ -98,13 +98,6 @@ export const plannerAPI = {
 
 export const studyPlanAPI = {
   generate: (payload) => api.post('/study-plan/generate', payload),
-};
-
-export const flashcardAPI = {
-  getByTopic: (topicId) => api.get(`/flashcards/topic/${topicId}`),
-  getByPdf: (pdfId) => api.get(`/flashcards/pdf/${pdfId}`),
-  review: (flashcardId, rating) => api.post(`/flashcards/${flashcardId}/review`, { rating }),
-  getDue: () => api.get('/flashcards/due'),
 };
 
 export const reportAPI = {

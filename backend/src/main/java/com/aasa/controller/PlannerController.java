@@ -13,7 +13,6 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/planner")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class PlannerController {
 
     private static final Logger logger = Logger.getLogger(PlannerController.class.getName());

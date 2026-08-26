@@ -7,6 +7,7 @@ import com.aasa.entity.Quiz;
 import com.aasa.entity.QuizAttempt;
 import com.aasa.entity.Topic;
 import com.aasa.entity.User;
+import jakarta.persistence.EntityNotFoundException;
 import com.aasa.repository.QuizAttemptRepository;
 import com.aasa.repository.PdfDocumentRepository;
 import com.aasa.service.AuthService;
@@ -25,7 +26,6 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/quizzes")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class QuizController {
 
     private static final Logger logger = Logger.getLogger(QuizController.class.getName());
@@ -50,9 +50,15 @@ public class QuizController {
 
     @GetMapping("/topic/{topicId}")
     @Transactional(readOnly = true)
-    public ResponseEntity<List<QuizDto>> getQuizzesByTopic(@PathVariable Long topicId) {
+    public ResponseEntity<List<QuizDto>> getQuizzesByTopic(@PathVariable Long topicId, Authentication authentication) {
         try {
             logger.info("Fetching quizzes for topic ID: " + topicId);
+            User user = authService.getUserByEmail(authentication.getName());
+            Topic topic = topicAnalysisService.getTopicById(topicId);
+            if (topic.getPdfDocument() == null
+                    || !topic.getPdfDocument().getUser().getId().equals(user.getId())) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
             List<QuizDto> quizzes = quizEngineService.getQuizzesByTopic(topicId);
             logger.info("Found " + quizzes.size() + " quizzes for topic");
             return ResponseEntity.ok(quizzes);
@@ -86,10 +92,16 @@ public class QuizController {
 
     @GetMapping("/{quizId}")
     @Transactional(readOnly = true)
-    public ResponseEntity<QuizDto> getQuiz(@PathVariable Long quizId) {
+    public ResponseEntity<QuizDto> getQuiz(@PathVariable Long quizId, Authentication authentication) {
         try {
             logger.info("Fetching quiz ID: " + quizId);
+            User user = authService.getUserByEmail(authentication.getName());
             Quiz quiz = quizEngineService.getQuizById(quizId);
+            Topic topic = quiz.getTopic();
+            if (topic == null || topic.getPdfDocument() == null
+                    || !topic.getPdfDocument().getUser().getId().equals(user.getId())) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
             return ResponseEntity.ok(convertToDto(quiz));
         } catch (Exception e) {
             logger.severe("Error fetching quiz: " + e.getMessage());
@@ -119,6 +131,12 @@ public class QuizController {
 
             User user = authService.getUserByEmail(authentication.getName());
             Quiz quiz = quizEngineService.getQuizById(quizId);
+            Topic ownedTopic = quiz.getTopic();
+            if (ownedTopic == null || ownedTopic.getPdfDocument() == null
+                    || !ownedTopic.getPdfDocument().getUser().getId().equals(user.getId())) {
+                logger.warning("Quiz " + quizId + " not found for user " + user.getId());
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
 
             String normalizedSelectedAnswer = request.getSelectedAnswer().trim();
             String correctAnswer = quiz.getCorrectAnswer();

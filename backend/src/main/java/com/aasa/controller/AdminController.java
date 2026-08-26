@@ -16,7 +16,6 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/admin")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class AdminController {
 
     private static final Logger logger = Logger.getLogger(AdminController.class.getName());
@@ -134,8 +133,16 @@ public class AdminController {
 
     @DeleteMapping("/entities/{entityName}/{id}")
     public ResponseEntity<?> deleteRecord(Authentication authentication, @PathVariable String entityName, @PathVariable Long id) {
+        // Resolve authorization up front so an anonymous or non-admin caller
+        // receives the same 403 as the other admin endpoints instead of the
+        // generic 500 produced by the fallback handler below.
         try {
             checkAdmin(authentication);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+        }
+
+        try {
             Class<?> clazz = ENTITY_MAP.get(entityName);
             if (clazz == null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Unknown entity: " + entityName));

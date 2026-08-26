@@ -14,7 +14,7 @@ AI/ML, algorithms, chunking, embedding, retrieval, reranking are used.
 ```mermaid
 flowchart LR
     subgraph Client["Frontend - React 18 + Vite"]
-        UI[Pages - Dashboard, Study, AI Chat, Quiz]
+        UI[Pages - Dashboard, Study, AI Chat, Quiz,<br/>Planner, Reports, Analytics]
     end
 
     subgraph Backend["Backend - Spring Boot Java 17, port 9096"]
@@ -47,6 +47,26 @@ flowchart LR
 | Docker | `pgvector/pgvector` image | Runs the DB with the `vector` extension available |
 | AI #1 | Gemini embedding model | Text → 768-dim vectors |
 | AI #2 | Gemini flash models | Topic extraction, quizzes, explanations, RAG answers |
+
+### 1.1 Account lifecycle (register -> verify -> sign in)
+
+1. **Register** - `POST /api/auth/register` validates the payload, hashes the
+   password with BCrypt and stores the user unverified.
+2. **E-mail OTP** - an `OtpChallenge` row keeps only a *hash* of the code plus
+   purpose, expiry and attempt count; delivery uses SMTP when
+   `SMTP_ENABLED=true`, otherwise the code is logged server-side for local
+   testing (`OTP_LOG_CODES=true`).
+3. **Verify** - `POST /api/auth/verify-email` checks hash + expiry + attempts,
+   marks the account verified and returns the first JWT.
+4. **Sign in** - `POST /api/auth/login` re-checks credentials and issues a
+   fresh 24 h token; every later request carries it as `Bearer`.
+5. **Recovery** - forgot/reset reuse the same OTP mechanism with purpose
+   `PASSWORD_RESET`; Google sign-in validates the ID token's issuer, audience
+   and expiry server-side before issuing a session.
+
+The Profile page's exam-date editor feeds the same trust chain: it calls
+`PUT /api/pdfs/{pdfId}/exam-date`, which is ownership-checked, so the urgency
+term in Workflow D always uses real data.
 
 ---
 
@@ -261,6 +281,11 @@ flowchart TD
     J --> K[Dashboard ranking + study plan<br/>instantly reflect the new evidence]
 ```
 
+> **Ownership gate:** before grading, `QuizController` verifies
+> quiz → topic → `pdf_documents.user_id` against the JWT caller and returns 404
+> otherwise. The same guard wraps every topic, dashboard and report route, so
+> one student can never read or mutate another student's data.
+
 ---
 
 ## 5. Workflow D — Study Plan & Recommendation Generation
@@ -269,25 +294,32 @@ This is where the algorithm's output becomes something the student actually sees
 
 ```mermaid
 flowchart TD
-    A[User opens Dashboard / requests a study plan] --> B[PlannerService.generatePlan]
-    B --> C[Load all topics for user's PDFs]
+    A[User opens Planner / Dashboard] --> B[PlannerService.generatePlanner user]
+    B --> C[Load all topics + StudyProgress rows for the user]
     C --> D["For each topic:<br/>AdaptivePriorityService.calculatePriority()"]
     D --> E1[mastery from BKT/Beta posterior]
     D --> E2[forgetting risk from lastStudyDate]
     D --> E3[exam urgency from pdf.exam_date]
     D --> E4[importance from AI analysis]
     E1 & E2 & E3 & E4 --> F[Sort topics by priority DESC]
-    F --> G{Daily minutes budget}
-    G --> H["Allocate sessions:<br/>high priority first,<br/>duration from complexity<br/>estimateDuration()"]
-    H --> I[Optional LLM polish:<br/>StudyPlanService asks Gemini for<br/>per-session descriptions/tips]
-    I --> J[StudyPlan saved - shown on Dashboard calendar]
+    F --> G["todayTasks - max 5 blocks:<br/>LEARN weakest first, then REVISION,<br/>PRACTICE, light REVISION"]
+    F --> H["studyRoadmap across<br/>min daysUntilExam, 14 days"]
+    F --> I["revisionSchedule reads the stored<br/>SM-2 nextReviewDate when present:<br/>Due now / Tomorrow / Review in N days<br/>fallback heuristics only for<br/>never-attempted topics"]
+    G & H & I --> J["recommendations + practiceDays<br/>recomputed live per request -<br/>no persistence, no LLM call"]
 
-    K[RecommendationEngineService] --> L["Same priority ranking -><br/>'Revise X today' cards,<br/>quiz suggestions per weak topic"]
+    K[RecommendationEngineService] --> L["Insights + N-day schedule endpoints<br/>same learner evidence, legacy formula"]
 ```
 
 **Why this is "adaptive":** the same quiz submission from Workflow C instantly changes
 the ordering here. Score badly on *OSI Model* → mastery drops → forgetting risk rises →
 priority rises → tomorrow's plan puts OSI first. Nothing is hardcoded per topic.
+
+### 5.1 Companion endpoint — study report (`GET /api/reports/study-report`)
+
+`ReportService` aggregates the same evidence (quiz attempts, `StudyProgress`,
+ranked topics) into `{summary, topicBreakdown[], recommendations[]}` for the
+Reports page, which exports it as JSON or CSV. The route is read-only,
+ownership-scoped like every other endpoint, and needs no AI call.
 
 ---
 
@@ -311,6 +343,9 @@ Use this table to answer *"where is X used?"* instantly.
 | **Evidence-based weakness (statistical model)** | Difficulty-weighted error rate + mastery gap + response time + overdue factor | `WeaknessEngineService` | C |
 | **Beta-Binomial posterior (Bayesian stats)** | Success/failure counts → probability distribution of true ability | `MasteryService` | C |
 | **SM-2 spaced repetition (classic algorithm)** | Interval growth 1→6→days×EF based on quality | `MasteryService` (nextReviewDate) | C |
+| **Ownership / multi-tenant isolation** | Every ID route verifies resource ↔ caller; retrieval SQL joins `pdf_documents` on the owner | All controllers, `VectorSearchService` | A–E |
+| **Report aggregation** | Summary + topic breakdown + mastery-based recommendations → JSON/CSV export | `ReportController`, `ReportService` | D |
+| **Offline weakness-model training (CRISP-DM)** | scikit-learn next-answer correctness experiment producing `weakness_model.joblib` | `ml/train_model.py` (offline) | — |
 | **Adaptive priority fusion (algorithm)** | Weighted combination of the four *computed* signals | `AdaptivePriorityService.calculatePriority()` | C→D |
 | **Greedy scheduling** | Fill daily budget highest-priority-first | `PlannerService` | D |
 
@@ -441,12 +476,20 @@ Every number here is produced by code you can open and explain:
 > pipeline around it: chunking strategy, vector schema + ownership-safe cosine SQL,
 > the hybrid reranker, grounding/citation design, BKT mastery estimation, the
 > forgetting-curve scheduler, adaptive priority fusion, greedy plan generation —
-> all tested (34 tests incl. a live pgvector integration test).
+> all tested (35 tests across nine suites, including an opt-in live
+> pgvector integration test).
+
+**"How do you know one student can't see another's data?"**
+> Every controller resolves the caller from the JWT and verifies that the
+> requested topic, quiz, PDF or report belongs to them before touching it
+> (404 otherwise). Vector retrieval SQL itself joins `pdf_documents` on the
+> owner, uploads replace only the caller's rows, and no shared default
+> account exists anymore.
 
 ---
 
-*End of workflow document. Pair it with `ARCHITECTURE.md` (system view),
-`PROJECT_DOCUMENTATION.md` (full reference), and `EVALUATION.md` (results table).*
+*End of workflow document. Pair it with `ARCHITECTURE.md` (system view)
+and `docs/schema.sql` (database bootstrap DDL).*
 
 
 

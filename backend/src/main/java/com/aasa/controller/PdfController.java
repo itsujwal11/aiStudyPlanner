@@ -22,7 +22,6 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/pdfs")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class PdfController {
 
     private static final Logger logger = Logger.getLogger(PdfController.class.getName());
@@ -162,6 +161,39 @@ public class PdfController {
             String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown reset error";
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to reset user data", "message", errorMessage));
+        }
+    }
+
+    @PutMapping("/{pdfId}/exam-date")
+    public ResponseEntity<?> updateExamDate(
+            @PathVariable Long pdfId,
+            @RequestBody Map<String, String> body,
+            Authentication authentication) {
+        try {
+            User user = authService.getUserByEmail(authentication.getName());
+
+            String examDateStr = body.get("examDate");
+            if (examDateStr == null || examDateStr.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "examDate is required"));
+            }
+
+            java.time.LocalDate parsedDate;
+            try {
+                parsedDate = java.time.LocalDate.parse(examDateStr);
+            } catch (java.time.format.DateTimeParseException dtpe) {
+                logger.warning("Invalid examDate format: " + examDateStr);
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Invalid examDate format. Expected YYYY-MM-DD"));
+            }
+
+            PdfDocumentDto dto = pdfManagementService.updateExamDate(pdfId, parsedDate, user.getId());
+            return ResponseEntity.ok(dto);
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "PDF not found"));
+        } catch (Exception e) {
+            logger.severe("Error updating exam date: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to update exam date"));
         }
     }
 

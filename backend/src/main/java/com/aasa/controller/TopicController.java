@@ -5,6 +5,8 @@ import com.aasa.dto.WeaknessUpdateRequest;
 import com.aasa.entity.PdfDocument;
 import com.aasa.service.AdaptivePriorityService;
 import com.aasa.entity.Topic;
+import com.aasa.entity.User;
+import jakarta.persistence.EntityNotFoundException;
 import com.aasa.service.PdfManagementService;
 import com.aasa.service.TopicAnalysisService;
 import com.aasa.service.AuthService;
@@ -24,7 +26,6 @@ import java.util.logging.Logger;
 @RestController
 
 @RequestMapping("/api/topics")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class TopicController {
 
     private static final Logger logger = Logger.getLogger(TopicController.class.getName());
@@ -36,11 +37,12 @@ public class TopicController {
     private AdaptivePriorityService adaptivePriorityService;
 
     @PostMapping("/analyze/{pdfId}")
-    public ResponseEntity<?> analyzePdf(@PathVariable Long pdfId) {
+    public ResponseEntity<?> analyzePdf(@PathVariable Long pdfId, Authentication authentication) {
         try {
             logger.info("Starting PDF analysis for PDF ID: " + pdfId);
 
-            PdfDocument pdf = pdfManagementService.getPdfById(pdfId);
+            User user = authService.getUserByEmail(authentication.getName());
+            PdfDocument pdf = getOwnedPdf(pdfId, user);
             logger.info("PDF found: " + pdf.getFileName());
 
             // ── Guard: don't re-analyze an already-analyzed PDF ──────────────────
@@ -87,8 +89,10 @@ public class TopicController {
     }
 
     @GetMapping("/pdf/{pdfId}")
-    public ResponseEntity<List<TopicDto>> getTopicsByPdf(@PathVariable Long pdfId) {
+    public ResponseEntity<List<TopicDto>> getTopicsByPdf(@PathVariable Long pdfId, Authentication authentication) {
         try {
+            User user = authService.getUserByEmail(authentication.getName());
+            getOwnedPdf(pdfId, user);
             return ResponseEntity.ok(topicAnalysisService.getTopicsByPdf(pdfId));
         } catch (Exception e) {
             logger.severe("Error fetching topics: " + e.getMessage());
@@ -99,6 +103,8 @@ public class TopicController {
     @GetMapping("/ranked/pdf/{pdfId}")
     public ResponseEntity<List<TopicDto>> getRankedTopicsByPdf(@PathVariable Long pdfId, Authentication authentication) {
         try {
+            User user = authService.getUserByEmail(authentication.getName());
+            getOwnedPdf(pdfId, user);
             List<TopicDto> topics = topicAnalysisService.getTopicsByPdf(pdfId);
             return ResponseEntity.ok(topics);
         } catch (Exception e) {
@@ -119,9 +125,10 @@ public class TopicController {
     }
 
     @GetMapping("/{topicId}")
-    public ResponseEntity<TopicDto> getTopic(@PathVariable Long topicId) {
+    public ResponseEntity<TopicDto> getTopic(@PathVariable Long topicId, Authentication authentication) {
         try {
-            Topic topic = topicAnalysisService.getTopicById(topicId);
+            User user = authService.getUserByEmail(authentication.getName());
+            Topic topic = getOwnedTopic(topicId, user);
             return ResponseEntity.ok(convertToDto(topic));
         } catch (Exception e) {
             logger.severe("Error fetching topic: " + e.getMessage());
@@ -132,10 +139,12 @@ public class TopicController {
     @PostMapping("/{topicId}/update-weakness")
     public ResponseEntity<TopicDto> updateWeakness(
             @PathVariable Long topicId,
-            @RequestBody WeaknessUpdateRequest request) {
+            @RequestBody WeaknessUpdateRequest request,
+            Authentication authentication) {
         try {
             logger.info("Updating weakness for topic ID: " + topicId);
-            Topic topic = topicAnalysisService.getTopicById(topicId);
+            User user = authService.getUserByEmail(authentication.getName());
+            Topic topic = getOwnedTopic(topicId, user);
             topic.setWeaknessScore(request.getWeakness());
 
             // Adaptive priority: manual weakness maps to a mastery estimate; forgetting risk
@@ -155,6 +164,23 @@ public class TopicController {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    private PdfDocument getOwnedPdf(Long pdfId, User user) {
+        PdfDocument pdf = pdfManagementService.getPdfById(pdfId);
+        if (pdf == null || !pdf.getUser().getId().equals(user.getId())) {
+            throw new EntityNotFoundException("PDF not found");
+        }
+        return pdf;
+    }
+
+    private Topic getOwnedTopic(Long topicId, User user) {
+        Topic topic = topicAnalysisService.getTopicById(topicId);
+        if (topic.getPdfDocument() == null
+                || !topic.getPdfDocument().getUser().getId().equals(user.getId())) {
+            throw new EntityNotFoundException("Topic not found");
+        }
+        return topic;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────

@@ -291,6 +291,13 @@ public class PdfManagementService {
                 .orElseThrow(() -> new EntityNotFoundException("PDF not found"));
     }
 
+    public PdfDocumentDto updateExamDate(Long pdfId, LocalDate examDate, Long userId) {
+        PdfDocument pdf = getOwnedPdfById(pdfId, userId);
+        pdf.setExamDate(examDate);
+        pdfDocumentRepository.save(pdf);
+        return convertToDto(pdf);
+    }
+
     public void deletePdf(Long pdfId, Long userId) {
         String filePath = transactionTemplate.execute(status -> deletePdfData(pdfId, userId));
         if (filePath == null) {

@@ -403,10 +403,35 @@ public class PlannerService {
         for (WeakTopicAnalysis analysis : analyses) {
             StudyProgress progress = progressMap.get(analysis.getTopicId());
 
-            // Calculate days since last practice
-            int daysSinceLastPractice = 0;
-            if (progress != null && progress.getTotalAttempts() != null && progress.getTotalAttempts() > 0) {
-                // Estimate based on weakness level
+            String frequency;
+            LocalDate revisionDate;
+            int daysSinceLastPractice;
+
+            // When the learner has attempted this topic, the stored SM-2
+            // nextReviewDate (set by MasteryService after every quiz attempt)
+            // is the authoritative source for the visible revision schedule.
+            if (progress != null && progress.getNextReviewDate() != null) {
+                revisionDate = progress.getNextReviewDate();
+                LocalDate lastStudy = progress.getLastStudyDate() != null
+                        ? progress.getLastStudyDate()
+                        : today;
+                daysSinceLastPractice = (int) ChronoUnit.DAYS.between(lastStudy, today);
+                if (daysSinceLastPractice < 0) {
+                    daysSinceLastPractice = 0;
+                }
+
+                long daysUntilNext = ChronoUnit.DAYS.between(today, revisionDate);
+                if (daysUntilNext <= 0) {
+                    frequency = "Due now";
+                } else if (daysUntilNext == 1) {
+                    frequency = "Tomorrow";
+                } else if (daysUntilNext <= 3) {
+                    frequency = "Every few days";
+                } else {
+                    frequency = "Review in " + daysUntilNext + " days";
+                }
+            } else {
+                // Fallback heuristics for topics with no attempt history yet.
                 if (analysis.getWeaknessScore() >= 0.7) {
                     daysSinceLastPractice = 0; // Needs immediate revision
                 } else if (analysis.getWeaknessScore() >= 0.4) {
@@ -414,25 +439,19 @@ public class PlannerService {
                 } else {
                     daysSinceLastPractice = 5;
                 }
-            } else {
-                daysSinceLastPractice = 7; // Not attempted recently
-            }
-
-            // Determine revision frequency
-            String frequency;
-            LocalDate revisionDate;
-            if (analysis.getWeaknessScore() >= 0.7) {
-                frequency = "Every day";
-                revisionDate = today;
-            } else if (analysis.getWeaknessScore() >= 0.4) {
-                frequency = "Every 2 days";
-                revisionDate = today.plusDays(1);
-            } else if (analysis.getMasteryLevel() >= 90.0) {
-                frequency = "Every 7 days";
-                revisionDate = today.plusDays(5);
-            } else {
-                frequency = "Every 3 days";
-                revisionDate = today.plusDays(2);
+                if (analysis.getWeaknessScore() >= 0.7) {
+                    frequency = "Every day";
+                    revisionDate = today;
+                } else if (analysis.getWeaknessScore() >= 0.4) {
+                    frequency = "Every 2 days";
+                    revisionDate = today.plusDays(1);
+                } else if (analysis.getMasteryLevel() >= 90.0) {
+                    frequency = "Every 7 days";
+                    revisionDate = today.plusDays(5);
+                } else {
+                    frequency = "Every 3 days";
+                    revisionDate = today.plusDays(2);
+                }
             }
 
             schedule.add(RevisionScheduleItem.builder()

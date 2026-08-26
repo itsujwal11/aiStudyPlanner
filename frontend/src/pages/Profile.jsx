@@ -46,6 +46,16 @@ export const Profile = () => {
     try {
       if (formData.examDate) {
         localStorage.setItem('examDate', new Date(formData.examDate).toISOString())
+        // Also persist the exam date in the backend so the planner's exam
+        // urgency term uses it (PdfDocument.examDate drives the priority engine).
+        try {
+          const pdfs = await pdfAPI.list()
+          if (pdfs.data && pdfs.data.length > 0) {
+            await pdfAPI.updateExamDate(pdfs.data[0].id, formData.examDate)
+          }
+        } catch (err) {
+          console.error('Failed to persist exam date to backend', err)
+        }
       }
       setSuccess('Profile updated successfully!')
       setTimeout(() => setSuccess(''), 3000)

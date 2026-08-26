@@ -13,7 +13,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/recommendations")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class RecommendationController {
 
     @Autowired

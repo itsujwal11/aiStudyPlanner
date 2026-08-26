@@ -1,118 +1,28 @@
 package com.aasa.service;
 
-import com.aasa.dto.AuthRequest;
-import com.aasa.dto.AuthResponse;
 import com.aasa.entity.User;
 import com.aasa.repository.UserRepository;
-import com.aasa.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+/**
+ * Minimal authentication-support service. Account registration, login and
+ * password flows are handled by {@link AccountAuthService}; this class only
+ * exposes helper lookups used by controllers to resolve the authenticated
+ * user from the JWT subject.
+ *
+ * <p>Formerly this class auto-seeded a predictable default administrator
+ * (admin@aasa.com / admin123) on every startup via an
+ * {@code ApplicationReadyEvent} listener, and exposed register/login/seedAdmin
+ * helpers. Those were removed because a well-known default admin is a security
+ * risk in any real deployment — an administrator should instead be created via
+ * a controlled, environment-driven provisioning step.</p>
+ */
 @Service
 public class AuthService {
 
     @Autowired
     private UserRepository userRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private JwtTokenProvider jwtTokenProvider;
-
-    public AuthResponse register(AuthRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already registered");
-        }
-
-        User user = User.builder()
-                .email(request.getEmail())
-                .name(request.getName())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role("USER")
-                .build();
-
-        userRepository.save(user);
-
-        String token = jwtTokenProvider.generateToken(user.getEmail());
-
-        return AuthResponse.builder()
-                .token(token)
-                .email(user.getEmail())
-                .name(user.getName())
-                .userId(user.getId())
-                .role(user.getRole())
-                .build();
-    }
-
-    public AuthResponse login(AuthRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid credentials");
-        }
-
-        String token = jwtTokenProvider.generateToken(user.getEmail());
-
-        return AuthResponse.builder()
-                .token(token)
-                .email(user.getEmail())
-                .name(user.getName())
-                .userId(user.getId())
-                .role(user.getRole())
-                .build();
-    }
-
-    public AuthResponse seedAdmin() {
-        String adminEmail = "admin@aasa.com";
-        if (!userRepository.existsByEmail(adminEmail)) {
-            User admin = User.builder()
-                    .email(adminEmail)
-                    .name("Admin")
-                    .password(passwordEncoder.encode("admin123"))
-                    .role("ADMIN")
-                    .emailVerified(true)
-                    .build();
-            userRepository.save(admin);
-        }
-        User admin = userRepository.findByEmail(adminEmail).get();
-        if (!Boolean.TRUE.equals(admin.getEmailVerified())) {
-            admin.setEmailVerified(true);
-            userRepository.save(admin);
-        }
-        String token = jwtTokenProvider.generateToken(admin.getEmail());
-        return AuthResponse.builder()
-                .token(token)
-                .email(admin.getEmail())
-                .name(admin.getName())
-                .userId(admin.getId())
-                .role(admin.getRole())
-                .build();
-    }
-
-    @EventListener(ApplicationReadyEvent.class)
-    public void initAdmin() {
-        try {
-            String adminEmail = "admin@aasa.com";
-            if (!userRepository.existsByEmail(adminEmail)) {
-                User admin = User.builder()
-                        .email(adminEmail)
-                        .name("Admin")
-                        .password(passwordEncoder.encode("admin123"))
-                        .role("ADMIN")
-                        .emailVerified(true)
-                        .build();
-                userRepository.save(admin);
-                System.out.println("Admin user seeded on startup: admin@aasa.com / admin123");
-            }
-        } catch (Exception e) {
-            System.err.println("Failed to seed admin user on startup: " + e.getMessage());
-        }
-    }
 
     public User getUserByEmail(String email) {
         return userRepository.findByEmail(email)

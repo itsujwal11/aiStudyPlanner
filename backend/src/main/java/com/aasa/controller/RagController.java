@@ -18,7 +18,6 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/rag")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class RagController {
 
     private static final Logger logger = Logger.getLogger(RagController.class.getName());
