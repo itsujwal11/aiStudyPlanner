@@ -1,0 +1,6 @@
+# Inference service only (serve.py) - kept lean for the Docker image.
+pandas
+scikit-learn
+joblib
+fastapi
+uvicorn[standard]

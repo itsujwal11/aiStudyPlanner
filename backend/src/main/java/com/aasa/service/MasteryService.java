@@ -41,6 +41,14 @@ public class MasteryService {
         int sm2Quality = mapToSm2Quality(isCorrect, timeTakenSeconds);
         double masteryBefore = progress.getMasteryLevel() != null ? progress.getMasteryLevel() : 0.0;
 
+        // Captured before lastStudyDate is overwritten below: this is how long the
+        // learner actually waited, which is what makes `actual_interval` worth
+        // logging next to the interval SM-2 had scheduled.
+        int actualIntervalDays = progress.getLastStudyDate() == null
+                ? 0
+                : (int) Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(
+                        progress.getLastStudyDate(), LocalDate.now()));
+
         // Two estimators are combined on every attempt:
         // 1) Beta-Binomial posterior — accumulates raw success/failure evidence (alpha/beta)
         // 2) Bayesian Knowledge Tracing — models guess/slip noise explicitly
@@ -48,7 +56,6 @@ public class MasteryService {
         double bktMastery = knowledgeTracingService.updateMastery(masteryBefore, isCorrect);
         double newMastery = clamp01(0.5 * betaBinomialMastery + 0.5 * bktMastery);
         SM2Result sm2 = applySm2(progress, sm2Quality);
-        int rating = mapQualityToRating(sm2Quality);
 
         progress.setMasteryLevel(newMastery);
         progress.setSm2Interval(sm2.interval);
@@ -63,10 +70,13 @@ public class MasteryService {
                 .user(user)
                 .topic(topic)
                 .reviewType("QUIZ")
-                .rating(rating)
+                // The SM-2 recall quality itself (0-5), not a re-derived band:
+                // this log is write-only audit history, so the raw signal is the
+                // most useful thing to keep.
+                .rating(sm2Quality)
                 .responseTimeMs(timeTakenSeconds * 1000)
                 .scheduledDays(sm2.interval)
-                .actualInterval(progress.getSm2Interval() != null ? progress.getSm2Interval() : 0)
+                .actualInterval(actualIntervalDays)
                 .masteryBefore(masteryBefore)
                 .masteryAfter(newMastery)
                 .createdAt(LocalDateTime.now())
@@ -96,18 +106,28 @@ public class MasteryService {
         return alpha / (alpha + beta);
     }
 
+    /**
+     * Maps an attempt onto SM-2's 0..5 recall-quality scale.
+     *
+     * <p>SM-2 splits the scale at 3: {@code q >= 3} means the item <em>was</em>
+     * recalled (3 = correct with serious difficulty, 4 = correct after
+     * hesitation, 5 = perfect recall), while {@code q < 3} means it was
+     * <em>not</em> recalled and the repetition count resets. Correct answers
+     * therefore map to 3-5 by speed, and only a wrong answer may fall below 3.</p>
+     *
+     * <p>An earlier revision mapped a correct-but-slow answer (&gt;15 s) to
+     * quality 2 — a value SM-2 defines as an incorrect response. A student who
+     * answered everything correctly but read carefully was reset to a one-day
+     * interval on every attempt and their ease factor was floored at 1.3, so
+     * their schedule never grew. That mapping also never produced quality 5,
+     * and since the SM-2 ease-factor term is exactly zero at quality 4, the
+     * ease factor could only ever decrease. Both are fixed here.</p>
+     */
     private int mapToSm2Quality(boolean isCorrect, int timeTakenSeconds) {
-        if (isCorrect && timeTakenSeconds < 5) return 4;
-        if (isCorrect && timeTakenSeconds < 15) return 3;
-        if (isCorrect) return 2;
-        return 1;
-    }
-
-    private int mapQualityToRating(int sm2Quality) {
-        if (sm2Quality >= 4) return 4;
-        if (sm2Quality >= 3) return 3;
-        if (sm2Quality >= 2) return 2;
-        return 1;
+        if (!isCorrect) return 1;
+        if (timeTakenSeconds < 5) return 5;   // perfect, immediate recall
+        if (timeTakenSeconds < 15) return 4;  // correct after hesitation
+        return 3;                             // correct with difficulty
     }
 
     private SM2Result applySm2(StudyProgress progress, int quality) {
@@ -124,7 +144,12 @@ public class MasteryService {
             } else if (n == 1) {
                 interval = 6;
             } else {
-                interval = (int) Math.ceil(progress.getSm2Interval() * ef);
+                // Defensive default: rows created before the SM-2 columns existed
+                // can carry a null interval, which would unbox to a NPE here.
+                int previousInterval = progress.getSm2Interval() != null
+                        ? progress.getSm2Interval()
+                        : 6;
+                interval = (int) Math.ceil(previousInterval * ef);
             }
             n++;
         }

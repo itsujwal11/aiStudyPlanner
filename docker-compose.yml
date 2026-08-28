@@ -21,6 +21,27 @@ services:
       timeout: 5s
       retries: 5
 
+  ml-service:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    container_name: aasa-ml
+    ports:
+      - "8000:8000"
+    networks:
+      - aasa-network
+    volumes:
+      # The 30 MB joblib is gitignored, so it is mounted rather than baked into
+      # the image. Generate it with `cd ml && python train_model.py`; the
+      # service reports modelLoaded:false until it exists, and the backend
+      # falls back to evidence-only weakness scoring.
+      - ./ml/models:/app/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -31,13 +52,15 @@ services:
       SPRING_DATASOURCE_USERNAME: aasa_user
       SPRING_DATASOURCE_PASSWORD: aasa_password
       GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in your environment or root .env file}
-      GEMINI_MODEL_NAME: gemini-1.5-flash
       JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
+      ML_WEAKNESS_URL: http://ml-service:8000
     ports:
       - "9096:9096"
     depends_on:
       postgres:
         condition: service_healthy
+      ml-service:
+        condition: service_started
     networks:
       - aasa-network
     volumes:

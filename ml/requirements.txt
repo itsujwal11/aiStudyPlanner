@@ -1,5 +1,5 @@
-pandas
-scikit-learn
+# Training (train_model.py). Includes everything the inference service needs.
+-r requirements-serve.txt
+
 matplotlib
 seaborn
-joblib

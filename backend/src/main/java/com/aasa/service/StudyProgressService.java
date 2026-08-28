@@ -47,6 +47,12 @@ public class StudyProgressService {
     @Autowired
     private MasteryService masteryService;
 
+    @Autowired
+    private LearnerFeatureService learnerFeatureService;
+
+    @Autowired
+    private MlWeaknessClient mlWeaknessClient;
+
     public StudyProgress getOrCreateProgress(User user, Topic topic) {
         logger.info("Getting or creating progress for user " + user.getId() + " and topic " + topic.getId());
 
@@ -93,13 +99,28 @@ public class StudyProgressService {
         );
 
         List<QuizAttempt> attempts = quizAttemptRepository.findByUserIdAndTopicId(user.getId(), topic.getId());
-        WeaknessEngineService.WeaknessResult weakness = weaknessEngineService.calculateEvidenceBasedWeakness(
+        WeaknessEngineService.WeaknessResult evidence = weaknessEngineService.calculateEvidenceBasedWeakness(
                 attempts, sr.mastery, progress.getNextReviewDate());
+
+        // Hybrid weakness: 0.70 * evidence + 0.30 * (1 - P(correct on next attempt)).
+        // The model call is fail-soft — an empty result leaves the evidence score
+        // untouched, so a missing or unreachable model never blocks a submission.
+        Double modelWeakness = mlWeaknessClient
+                .predictWeakness(learnerFeatureService.extract(attempts))
+                .orElse(null);
+        WeaknessEngineService.WeaknessResult weakness =
+                weaknessEngineService.blendWithModel(evidence, modelWeakness);
+
         progress.setWeaknessLevel(weakness.level());
         topic.setWeaknessScore(weakness.score());
 
         logger.info("Updated progress - Score: " + score + ", Weakness: " + weakness.level()
                 + ", Mastery: " + String.format("%.4f", sr.mastery)
+                + ", Evidence: " + String.format("%.4f", evidence.score())
+                + ", Model: " + (modelWeakness == null
+                        ? "unavailable (evidence only)"
+                        : String.format("%.4f", modelWeakness))
+                + ", Hybrid: " + String.format("%.4f", weakness.score())
                 + ", Next review: " + progress.getNextReviewDate());
 
         studyProgressRepository.save(progress);

@@ -55,6 +55,8 @@ backend.log*
 
 # Machine-learning local artifacts
 ml/.venv/
+__pycache__/
+*.pyc
 ml/data/
 ml/models/*.joblib
 ml.zip

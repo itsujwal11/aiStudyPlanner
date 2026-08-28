@@ -19,6 +19,126 @@ Tracing + an exponential forgetting curve), never from manual ratings; and
 answers come only from the student's own document through retrieval-augmented
 generation with mandatory `[Source N]` citations.
 
+Weakness scoring is **hybrid**: the deterministic evidence formula is corrected
+by a supervised Random Forest trained on ~283k real practice opportunities
+(ASSISTments), combined as `0.70 · evidence + 0.30 · (1 − P(correct))`. The
+model runs as its own service and the blend is **fail-soft** — if it is
+unavailable the system scores from evidence alone and stays fully usable.
+
+## The problem it solves
+
+A student two weeks from an exam has a 60-page lecture PDF and no idea where to
+start. The tools available to them each fail in a specific way:
+
+| What they'd otherwise do | Why it falls short |
+|---|---|
+| Re-read the PDF start to finish | Time spent is spread evenly over material they already know and material they don't |
+| Make their own flashcards / plan | The plan is built from a *guess* about their own weak spots — and self-assessment is famously unreliable |
+| Ask ChatGPT about the subject | Answers come from the model's general knowledge, not their lecturer's actual material, and can't be traced to a page |
+| Generic study-planner apps | Ask the student to rate each topic's difficulty by hand, then never revisit that rating as they learn |
+
+The common failure is that **the plan never reacts to evidence**. AASA's premise
+is that the study plan should be derived from what the student demonstrably
+knows — measured from their answers — and that every explanation should be
+traceable to their own document.
+
+## Who it's for
+
+A university or college student revising for a specific exam from a specific set
+of lecture notes, working alone. Single-user by design: there is no classroom
+view, no instructor dashboard, and no sharing between accounts. An `ADMIN` role
+exists purely for database inspection during development.
+
+## What a student actually does
+
+The whole product in one pass, with the route each step lives on:
+
+1. **Register** (`/register`) → an OTP arrives by e-mail → **verify** (`/verify-email`).
+   Google sign-in is an alternative that skips the OTP.
+2. **Upload one lecture PDF and the exam date** (`/upload`). The response returns
+   immediately — processing happens in the background, so the student is never
+   left staring at a spinner. A toast (and a desktop notification if they've
+   switched tabs) tells them when it's ready.
+3. **Behind the scenes**: the text is extracted, split into ~512-token passages,
+   embedded into vectors, and stored; then Gemini reads the document and returns
+   the major topics with descriptions, importance and complexity, plus MCQ
+   questions per topic.
+4. **See what's in the document** (`/pdf/:id`, `/study/:id`) — the topic list with
+   descriptions, complexity and importance.
+5. **Take the diagnostic quiz** (`/diagnostic/:id`). This is the step that
+   bootstraps the whole adaptive loop: until the student answers something, the
+   system has no evidence and every topic looks equally urgent.
+6. **Read the plan** (`/planner`) — today's tasks, a roadmap to the exam date, a
+   revision schedule with real due dates, and recommendations. Every item is
+   ranked by measured evidence, and the ordering changes after each answer.
+7. **Practise** (`/practice`) — more questions on the topics the plan says matter
+   most. Each answer updates mastery, weakness, and the next review date.
+8. **Ask questions** (`/ai-chat`) — free-form questions answered *only* from the
+   uploaded document, with a Sources panel naming the file, page and relevance of
+   each passage used. `/quick-answers` offers pre-built topic overviews that cost
+   no API call at all.
+9. **Track progress** (`/dashboard`, `/analytics`) and **export** a study report
+   as JSON or CSV (`/reports`).
+
+Steps 5–7 form the loop the project is built around: *answer → measure → re-rank
+→ study what now matters most*.
+
+## What it can do — feature inventory
+
+| Area | Capability |
+|---|---|
+| Accounts | Register, e-mail OTP verification, login, forgot/reset password, Google sign-in, 24 h JWT sessions |
+| Documents | Upload a PDF with an exam date, background processing with live status, editable exam date, delete, full account reset |
+| Understanding | Automatic topic extraction with per-topic description, importance and complexity scores |
+| Assessment | Auto-generated 4-option MCQs per topic, diagnostic and practice modes, timed answers, instant grading with explanations |
+| Learner model | Mastery probability per topic, forgetting risk, weakness banding, spaced-repetition due dates |
+| Planning | Ranked topics, today's task list with durations, roadmap to exam, revision schedule, written recommendations |
+| Question answering | Grounded RAG chat over the student's own PDF with page-level citations; zero-cost predefined answers |
+| Reporting | Dashboard stats, performance charts, exportable JSON/CSV study report |
+| Administration | ADMIN-only browser over an allow-listed set of entities |
+
+## How the system fits together at runtime
+
+Four processes, each independently replaceable:
+
+```mermaid
+flowchart LR
+    B["Browser<br/>React SPA"]
+    F["frontend port 3000<br/>Vite / static bundle"]
+    A["backend port 9096<br/>Spring Boot"]
+    M["ml-service port 8000<br/>FastAPI + Random Forest"]
+    D[("postgres port 5432<br/>+ pgvector")]
+    G{{"Google Gemini<br/>external API"}}
+
+    B --> F
+    B -->|"JSON + Bearer JWT"| A
+    A --> D
+    A -.->|"weakness prediction<br/>optional, fail-soft"| M
+    A -->|"embeddings + generation"| G
+    M -.->|reads at startup| J[(weakness_model.joblib)]
+```
+
+**What each one owns.** The browser holds only a JWT and cached user info in
+`localStorage` — no business logic. The backend is the single source of truth:
+every rule, score and ownership check lives there, because a client-side check
+is not a security control. Postgres stores both relational data *and* the vector
+index, so retrieval is a SQL query rather than a second datastore to keep in
+sync. The ML service is the only component that may be absent — the backend
+degrades to evidence-only scoring without it.
+
+**Two of the four are optional at runtime.** Gemini is required for *ingesting*
+a new PDF and for RAG answers, but an already-processed document stays fully
+usable for quizzes, planning and reporting without it. The ML service is never
+required. This matters for a demo: the app does not become a brick when a key
+expires or a quota runs out.
+
+**Request lifecycle.** Every authenticated call follows the same path:
+`JwtAuthenticationFilter` resolves the caller from the token → the controller
+verifies the requested resource belongs to that caller (404 if not) → the service
+layer applies business rules → JPA persists. There is no session state on the
+server; the token carries identity, which is what makes the backend horizontally
+scalable.
+
 ## Technology stack
 
 | Layer | Technology |
@@ -27,24 +147,27 @@ generation with mandatory `[Source N]` citations.
 | Frontend | React 18, Vite 5, React Router 6, Axios, Tailwind CSS, Framer Motion, Recharts, react-hot-toast, lucide-react |
 | Database | PostgreSQL 17 + pgvector (`pgvector/pgvector:pg17` image) |
 | AI services | Google Gemini - `gemini-embedding-001` (768-dim vectors); flash-class models for analysis, quiz generation and grounded answers |
-| Offline ML | Python 3, pandas, scikit-learn, matplotlib/seaborn, joblib |
-| Ports | frontend 3000 - backend 9096 - postgres 5432 |
+| ML training | Python 3, pandas, scikit-learn, matplotlib/seaborn, joblib (`ml/train_model.py`) |
+| ML serving | Python 3.11, FastAPI + uvicorn (`ml/serve.py`) — serves the trained Random Forest to the backend over HTTP |
+| Ports | frontend 3000 - backend 9096 - ml-service 8000 - postgres 5432 |
 
 ## Repository layout
 
 ```
 backend/src/main/java/com/aasa/
     controller/   REST endpoints (13 controllers)
-    service/      business logic (~25 services)
-    repository/   Spring Data JPA interfaces
-    entity/       JPA entities (10 tables)
-    dto/          request/response payloads
+    service/      business logic (34 services)
+    repository/   Spring Data JPA interfaces (9)
+    entity/       JPA entities (9 tables)
+    dto/          request/response payloads (36)
     security/     JWT provider + filter, CustomUserDetailsService
     config/       SecurityConfig, AsyncConfig, exception handlers
-frontend/src/     pages (15) - components - context - hooks - api.js
-ml/               train_model.py - data/ - models/ - reports/
+frontend/src/     pages (17) - components (7) - context - hooks - api.js
+ml/               train_model.py (training) - serve.py (FastAPI inference)
+                  Dockerfile - requirements.txt / requirements-serve.txt
+                  data/ - models/ - reports/
 docs/             ARCHITECTURE.md - WORKFLOW.md - schema.sql
-docker-compose.yml  postgres+pgvector - backend - frontend
+docker-compose.yml  postgres+pgvector - ml-service - backend - frontend
 ```
 
 ```mermaid
@@ -70,11 +193,18 @@ flowchart TB
         QA[Quiz attempt stored] --> BKT[Bayesian Knowledge Tracing\nP new = update P prior , correct, guess g, slip s, learn p]
         BKT --> MP[mastery probability P K]
         REV[last review date] --> FC[Forgetting risk = 1 - e^ -lambda days]
+        QA --> EV[Evidence weakness\n0.60 error rate + 0.25 mastery gap\n+ 0.10 slow response + 0.05 overdue]
+        QA --> FEAT[LearnerFeatureService\nprev attempts / accuracy / avg time\n/ recent accuracy / opportunity]
+        FEAT --> RF["ml-service port 8000\nRandom Forest\nweakness = 1 - P correct"]
+        EV --> HYB[Hybrid weakness\n0.70 evidence + 0.30 model\nfalls back to evidence if model down]
+        RF -.optional.-> HYB
+        HYB --> WS[topic weaknessScore]
         MP --> PRI[Adaptive priority\n0.40 mastery gap + 0.25 forgetting + 0.20 exam urgency + 0.15 importance]
         FC --> PRI
         EXAM[exam date] --> PRI
         IMP[topic importance AI] --> PRI
         PRI --> PLAN[Topic ranking / daily study plan]
+        WS --> PLAN
         SM2[stored SM-2 nextReviewDate] --> SCHED[Visible revision schedule]
         PLAN --> SCHED
         QZ --> QA
@@ -86,7 +216,7 @@ flowchart TB
 
 | Stage | Implementation | File |
 |---|---|---|
-| PDF ingestion & chunking | text extraction, semantic chunks | `TextChunkingService`, `PdfManagementService` |
+| PDF ingestion & chunking | PDFBox text extraction, semantic chunks | `PdfExtractionService`, `TextChunkingService`, `PdfManagementService` |
 | Embeddings | Gemini `gemini-embedding-001`, 768-dim | `EmbeddingService` |
 | Vector store | Postgres + pgvector, cosine distance `<=>` | `VectorSearchService`, `docs/schema.sql` |
 | Retrieval | top-20 candidate pool per query | `RagAugmentedService.answerQuestion` |
@@ -94,6 +224,10 @@ flowchart TB
 | Grounded generation | citation-enforcing prompt → Gemini | `RagAugmentedService.buildRagPrompt` |
 | Mastery estimation | Bayesian Knowledge Tracing update per answer | `BayesianKnowledgeTracingService.updateMastery` |
 | Forgetting model | exponential decay `1 − e^(−λ·days)` | `BayesianKnowledgeTracingService.forgettingRisk` |
+| Evidence weakness | difficulty-weighted error rate + mastery gap + response time + overdue | `WeaknessEngineService.calculateEvidenceBasedWeakness` |
+| Model features | attempt history → the 5 features the classifier was trained on | `LearnerFeatureService.extract` |
+| Model inference | Random Forest `P(correct)` over HTTP; fail-soft client with cooldown | `MlWeaknessClient` → `ml/serve.py` |
+| Hybrid weakness | `0.70 · evidence + 0.30 · (1 − P(correct))` | `WeaknessEngineService.blendWithModel` |
 | Adaptive priority | weighted evidence formula (0.40/0.25/0.20/0.15) | `AdaptivePriorityService.calculatePriority` |
 | Scheduling consumers | planner tasks/roadmap; visible revision schedule reads the stored SM-2 `nextReviewDate` (heuristic labels only for never-attempted topics) | `PlannerService`, `StudyProgressService`, `AdaptivePriorityService` |
 | Account & session security | BCrypt hashes, stateless JWT (24 h), e-mail OTP verification/reset, Google ID-token validation | `AccountAuthService`, `JwtTokenProvider`, `JwtAuthenticationFilter`, `SecurityConfig` |
@@ -133,9 +267,19 @@ flowchart TB
   `VectorSearchService`, `RerankingService`, `RagAugmentedService`
 - **Learner-model cluster** - `MasteryService` (Beta-Binomial + BKT blend,
   SM-2 scheduling, ReviewLog), `BayesianKnowledgeTracingService`,
-  `WeaknessEngineService`, `AdaptivePriorityService`
-- **Planning cluster** - `PlannerService` (live recompute),
-  `RecommendationEngineService`, `StudyPlanService` (stateless experimental)
+  `WeaknessEngineService` (evidence formula + hybrid blend),
+  `AdaptivePriorityService`
+- **Weakness-model cluster** - `LearnerFeatureService` (attempt history → the
+  trained model's feature vector), `MlWeaknessClient` (fail-soft HTTP client
+  for `ml/serve.py`, with a failure cooldown so a dead service never stalls
+  quiz submission)
+- **Planning cluster** - `PlannerService` (live recompute; the adaptive
+  algorithm), `RecommendationEngineService` (serves `/api/recommendations/**`;
+  still ranks with the **legacy fixed-weight** formula
+  `0.35·complexity + 0.25·importance + 0.25·weakness + 0.15·urgency`, not
+  `AdaptivePriorityService` — see *Known limitations*), `StudyPlanService`
+  (stateless experiment behind `POST /api/study-plan/generate`; no frontend
+  caller, kept for reference only)
 - **Aggregation** - `DashboardService`, `AnalyticsService`, `ReportService`
 - **Administration** - `AdminDeletionService` (FK-safe deletes)
 
@@ -152,13 +296,18 @@ application pipeline.
 | 2. Data Understanding | `prepare_data()` profiles `skill_builder_data.csv`: 525,534 raw → 283,105 usable rows, 4,163 students | Uploaded PDFs must expose a real text layer; learner-event schema designed around attempts/progress |
 | 3. Data Preparation | Cleaning, dedup by `order_id`, response-time sanitising, leakage-safe features via `shift(1)` | `PdfExtractionService` → `TextChunkingService` → `EmbeddingService` → pgvector persistence |
 | 4. Modeling | Logistic Regression vs Random Forest scikit-learn pipelines | BKT posterior, exponential forgetting curve, `AdaptivePriorityService`, `WeaknessEngineService`, modified SM-2, hybrid RAG reranker |
-| 5. Evaluation | Student-wise split (no student in two sets); validation selects the winner, held-out test reports F1 0.734 / ROC-AUC 0.705 | 35 automated tests incl. the opt-in live-pgvector retrieval test; RAG Hit@5 / MRR@5 procedure |
-| 6. Deployment | Serialized to `models/weakness_model.joblib` + `reports/metrics.json`; live scoring integration is planned future work | Docker Compose: React SPA + Spring Boot API + PostgreSQL/pgvector; Vercel/Render deployment configs |
+| 5. Evaluation | Student-wise split (no student in two sets); validation selects the winner, held-out test reports F1 0.734 / ROC-AUC 0.705 | 64 automated tests across 12 suites, incl. two opt-in integration suites — live pgvector retrieval (3 cases, `RAG_INTEGRATION_TEST=true`) and live model inference (6 cases, `ML_INTEGRATION_TEST=true`); RAG Hit@5 / MRR@5 procedure |
+| 6. Deployment | Serialized to `models/weakness_model.joblib` + `reports/metrics.json`, then **served live** by `ml/serve.py` (FastAPI) and consumed by the backend | Docker Compose: React SPA + Spring Boot API + ML inference service + PostgreSQL/pgvector; Vercel/Render deployment configs |
 
-> **Honest status:** the trained classifier is currently an *offline* artifact —
-> topic ranking runs on the deterministic evidence formulas above, not on the
-> joblib model. Wiring it into live scoring is declared future work instead of
-> being claimed as live behaviour.
+> **Honest status:** the trained classifier is now **live** — every graded quiz
+> attempt calls it and its output contributes 30% of the topic's weakness score.
+> Two caveats stated plainly: (1) the 30 MB joblib and the 83 MB training CSV are
+> gitignored, so a fresh clone must run `python train_model.py` before the model
+> path activates; (2) until then — and whenever the service is unreachable — the
+> system deliberately degrades to the evidence-only formula rather than failing,
+> so *"the app is running"* does not by itself prove *"the model is running"*.
+> Check `GET /api/health`, which reports `weaknessModel: live | unavailable |
+> disabled`.
 
 ## Data model (PostgreSQL)
 
@@ -170,14 +319,267 @@ time.
 | Entity (table) | Key fields | Relationships |
 |---|---|---|
 | `users` | email (unique), name, password (BCrypt), role USER/ADMIN, email_verified, google_subject (unique, nullable) | owns all rows below |
-| `otp_challenges` | code_hash, purpose EMAIL_VERIFICATION/PASSWORD_RESET, expires_at, attempts, consumed_at | many -> 1 user |
+| `otp_challenges` | code_hash, purpose EMAIL_VERIFICATION/LOGIN/PASSWORD_RESET, expires_at, attempt_count, consumed_at | many -> 1 user |
 | `pdf_documents` | file_name, file_path, exam_date, extracted_text, is_analyzed, processing_status PENDING/PROCESSING/COMPLETED/FAILED, processing_error, upload_date | 1/user; owns topics + chunks |
 | `topics` | title, description, complexity_score, importance_score, priority_score, weakness_score | 1/pdf; owns quizzes |
 | `quizzes` | question, option_a..d, correct_answer, difficulty EASY/MEDIUM/HARD, explanation | 1/topic; owns attempts |
 | `quiz_attempts` | selected_answer, is_correct, marks_obtained, time_taken_seconds, attempt_time | user x quiz |
-| `study_progress` | weakness_level LOW/MEDIUM/HIGH/INSUFFICIENT_DATA/NOT_ATTEMPTED, completion_percentage, best_score, total/correct_attempts, mastery_level, alpha (2.0), beta (8.0), sm2_interval, sm2_efactor (2.5), sm2_repetitions, last_study_date, next_review_date | unique (user, topic) |
+| `study_progress` | weakness_level LOW/MEDIUM/HIGH/INSUFFICIENT_DATA/NOT_ATTEMPTED, completion_percentage, best_score, total/correct_attempts, mastery_level, alpha_param (2.0), beta_param (8.0), sm2_interval, sm2_efactor (2.5), sm2_repetitions, last_study_date, next_review_date | unique (user, topic) |
 | `document_chunks` | chunk_index, chunk_text, estimated page, embedding (TEXT vector literal) | 1/pdf; forms the RAG index |
 | `review_log` | review_type, rating 1-4, response_time_ms, scheduled_days, actual_interval, mastery_before/after, created_at (@PrePersist) | user x topic history |
+
+## Hybrid weakness scoring — how the trained model is wired in
+
+The offline experiment produced a Random Forest that predicts whether a learner
+answers their *next* practice opportunity correctly. That prediction is turned
+into a weakness figure and blended with the deterministic evidence formula.
+
+```mermaid
+sequenceDiagram
+    participant UI as React Study page
+    participant API as QuizController
+    participant SP as StudyProgressService
+    participant WE as WeaknessEngineService
+    participant LF as LearnerFeatureService
+    participant ML as MlWeaknessClient
+    participant PY as ml-service (port 8000)
+
+    UI->>API: POST /api/quizzes/{id}/submit
+    API->>SP: updateProgressAfterQuizAttempt(user, topic, attempt)
+    SP->>SP: MasteryService - BKT + Beta-Binomial + SM-2
+    SP->>WE: calculateEvidenceBasedWeakness(attempts, mastery, nextReview)
+    WE-->>SP: evidence score + band
+    SP->>LF: extract(attempts)
+    LF-->>SP: 5 features
+    SP->>ML: predictWeakness(features)
+    ML->>PY: POST /predict  (1.5 s timeout)
+    alt model available
+        PY-->>ML: {probability_correct, weakness}
+        ML-->>SP: Optional[weakness]
+        SP->>WE: blendWithModel(evidence, modelWeakness)
+        WE-->>SP: 0.70*evidence + 0.30*model
+    else unavailable / disabled / 503 / timeout
+        ML-->>SP: Optional.empty
+        SP->>WE: blendWithModel(evidence, null)
+        WE-->>SP: evidence unchanged
+    end
+    SP->>SP: persist weaknessLevel + topic.weaknessScore
+    SP-->>UI: graded result
+```
+
+**Feature contract.** `LearnerFeatureService` reconstructs exactly the five
+columns the model was fitted on, from the learner's attempts on that topic:
+
+| Feature | Meaning in AASA | Cold start |
+|---|---|---|
+| `previous_attempts` | attempts recorded on this topic so far | `0` |
+| `previous_accuracy` | correct / attempts so far | `0.5` |
+| `average_response_time` | mean seconds per attempt | `null` → median-imputed by the pipeline |
+| `recent_accuracy` | correct ratio over the last 3 attempts | `0.5` |
+| `opportunity` | 1-based index of the attempt being predicted | `1` |
+
+Training enforced no-leakage with a `shift(1)`; the same guarantee holds here
+structurally, because the features summarise every attempt made *so far* to
+predict the *next* one, which has not happened yet.
+
+**Failure policy.** Every failure mode — config-disabled, connection refused,
+timeout, HTTP 503 from a service with no artifact, malformed body, wrong
+prediction count — returns `Optional.empty()` and the evidence score passes
+through untouched. After 3 consecutive failures the client stops calling for
+60 s rather than paying a fresh timeout on every submission. A missing model
+must never make a student's answer fail to save.
+
+**Two deliberate non-blends.** `NOT_ATTEMPTED` topics keep weakness `1.0`
+instead of being diluted — with no history the model's inputs are all defaults,
+so blending would weaken the "never studied = study first" signal without adding
+information. `INSUFFICIENT_DATA` blends its *score* but keeps its *band*,
+because that band describes how much evidence exists, not how weak the learner is.
+
+## Algorithm reference — every formula and constant
+
+Complete inventory of the decision logic in the system. Every constant below is
+the value in the code, not an illustration.
+
+### 1. Bayesian Knowledge Tracing — `BayesianKnowledgeTracingService`
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| guess `g` | `0.20` | P(correct \| not mastered) |
+| slip `s` | `0.10` | P(wrong \| mastered) |
+| learn `p` on correct | `0.40` | P(skill consolidated this attempt) |
+| learn `p` on incorrect | `0.15` | P(skill partly learned from feedback) |
+
+```
+correct    P(obs) = (1-s)P / [ (1-s)P + g(1-P) ]
+incorrect  P(obs) = sP     / [ sP + (1-g)(1-P) ]
+then       P(new) = P(obs) + (1 - P(obs)) · p
+```
+
+The posterior update is canonical BKT. The **asymmetric learn rate** (0.40 vs
+0.15) is a deliberate deviation: standard BKT uses one transition probability
+`P(T)` regardless of outcome. The rationale is that answering correctly is
+stronger evidence of consolidation than reading feedback after an error.
+
+### 2. Forgetting curve — same service
+
+```
+λ    = 0.15 · (1.6 − mastery)        // 0.24 at mastery 0, 0.09 at mastery 1
+risk = 1 − e^(−λ · daysSinceReview)  // exactly 0 when reviewed today
+```
+
+Weak knowledge decays faster because λ falls as mastery rises.
+
+### 3. Beta-Binomial posterior — `MasteryService`
+
+| Parameter | Value |
+|---|---|
+| prior α | `2.0` |
+| prior β | `8.0` (prior mean `0.2` — pessimistic until evidence arrives) |
+| update | `α += 1` correct, `β += 1` incorrect |
+| guess penalty | `β += 0.3` when correct **and** answered in `< 3 s` |
+| estimate | `α / (α + β)` |
+
+The guess penalty discounts implausibly fast correct answers — a heuristic
+addition on top of the standard conjugate update.
+
+### 4. Mastery fusion — `MasteryService`
+
+```
+mastery = 0.5 · betaBinomial + 0.5 · bkt
+```
+
+Two independent estimators are averaged: the Beta-Binomial accumulates raw
+success/failure counts, while BKT models guess/slip noise explicitly.
+
+### 5. SM-2 spaced repetition — `MasteryService`
+
+Recall quality on SM-2's 0–5 scale, where `q >= 3` means *recalled*:
+
+| Attempt | Quality |
+|---|---|
+| correct, `< 5 s` | `5` (perfect recall) |
+| correct, `< 15 s` | `4` (correct after hesitation) |
+| correct, slower | `3` (correct with difficulty) |
+| incorrect | `1` |
+
+```
+q < 3  ->  repetitions = 0, interval = 1          // reset
+q >= 3 ->  n=0: interval = 1
+           n=1: interval = 6
+           n>1: interval = ceil(previousInterval · EF)
+           repetitions++
+
+EF' = EF + (0.1 − (5−q)(0.08 + (5−q)·0.02)),  floor 1.3
+```
+
+> **Corrected defect.** An earlier mapping scored a correct-but-slow answer as
+> quality `2` — a value SM-2 defines as an *incorrect* response. A student who
+> answered everything correctly but read carefully was reset to a one-day
+> interval on every attempt, with EF pinned at the 1.3 floor, so their schedule
+> never grew. That mapping also never produced quality `5`, and because the SM-2
+> ease term is exactly `0` at quality `4`, the ease factor could only ever
+> decrease. Both are fixed; `Sm2SchedulingTest` pins the contract.
+>
+> | Learner | Before (intervals / EF) | After |
+> |---|---|---|
+> | correct in 3 s | `1,6,15,38,95,238` / 2.50 | `1,6,17,48,140,421` / 3.10 |
+> | correct in 10 s | `1,6,14,30,59,107` / 1.66 | `1,6,15,38,95,238` / 2.50 |
+> | correct in 25 s | `1,1,1,1,1,1` / 1.30 | `1,6,14,30,59,107` / 1.66 |
+> | incorrect | `1,1,1,1,1,1` / 1.30 | unchanged |
+
+### 6. Evidence-based weakness — `WeaknessEngineService`
+
+```
+score = 0.60 · difficultyWeightedErrorRate
+      + 0.25 · masteryGap
+      + 0.10 · slowResponseFactor      // mean(min(seconds/60, 1))
+      + 0.05 · overdueFactor           // 1 when nextReviewDate is past
+```
+
+| Difficulty | Weight | | Band | Range |
+|---|---|---|---|---|
+| EASY | `1.0` | | HIGH | `>= 0.65` |
+| MEDIUM | `1.5` | | MEDIUM | `>= 0.35` |
+| HARD | `2.0` | | LOW | `< 0.35` |
+
+Fewer than `3` attempts yields `INSUFFICIENT_DATA`; no attempts yields
+`NOT_ATTEMPTED` with score `1.0`.
+
+When only a band is known (no attempt list), `getWeaknessScore` maps back:
+`LOW 0.2 · MEDIUM 0.5 · HIGH 0.9 · INSUFFICIENT_DATA 0.6 · NOT_ATTEMPTED 1.0`.
+
+### 7. Hybrid weakness — `WeaknessEngineService.blendWithModel`
+
+```
+weakness = 0.70 · evidence + 0.30 · (1 − P(correct next))
+```
+
+See *Hybrid weakness scoring* above for the feature contract and failure policy.
+
+### 8. Adaptive priority — `AdaptivePriorityService`
+
+```
+priority = 0.40 · (1 − mastery)          // BKT mastery gap
+         + 0.25 · forgettingRisk
+         + 0.20 · 1/(daysUntilExam + 1)   // 0.5 when no exam date
+         + 0.15 · topicImportance         // 0.5 when unknown
+```
+
+> **Known characteristic.** A topic with no `lastStudyDate` contributes
+> forgetting risk `0` — nothing has been forgotten because nothing was learned.
+> A never-studied topic can therefore rank *below* a half-learned stale one.
+> Worked example (exam in 9 days, importance 0.5): never studied scores
+> `0.4950`, while mastery-0.5 studied 14 days ago scores `0.5202`. This is
+> intentional — the stale topic is actively decaying — but it means "never
+> attempted" does not guarantee the top slot.
+
+### 9. Content scoring — `ScoringEngineService` / `TopicAnalysisService`
+
+```
+complexity = 0.4·(conceptDensity/10) + 0.3·(keywordDifficulty/10)
+           + 0.2·min(formulaCount/10, 1) + 0.1·min(contentLength/10000, 1)
+
+importance = 0.6·(conceptDensity/10) + 0.4·(keywordDifficulty/10)   // fallback only
+```
+
+Both are used only when Gemini does not return its own 0–1 score for the topic.
+
+### 10. Retrieval and reranking — `VectorSearchService` / `RerankingService`
+
+```
+similarity  = 1 − (embedding <=> queryEmbedding)     // pgvector cosine distance
+rerankScore = 0.70·similarity + 0.20·keywordOverlap + 0.10·titleMatch
+```
+
+Top-20 candidates retrieved, top-5 kept for generation (top-8 for quiz context).
+Chunking: `2048` chars target, `200` char overlap, max `500` chars per document,
+cut at paragraph then sentence boundaries.
+
+### Invariants
+
+Every weighted formula above sums to exactly `1.0` and clamps its result to
+`[0,1]`, so no score can leave its declared range:
+
+| Formula | Weights | Σ |
+|---|---|---|
+| Adaptive priority | 0.40 / 0.25 / 0.20 / 0.15 | 1.00 |
+| Evidence weakness | 0.60 / 0.25 / 0.10 / 0.05 | 1.00 |
+| Hybrid weakness | 0.70 / 0.30 | 1.00 |
+| Mastery fusion | 0.50 / 0.50 | 1.00 |
+| Reranking | 0.70 / 0.20 / 0.10 | 1.00 |
+| Complexity | 0.4 / 0.3 / 0.2 / 0.1 | 1.00 |
+| Importance (fallback) | 0.6 / 0.4 | 1.00 |
+
+### Unused algorithmic code
+
+- `MasteryService.predictedRetention(mastery, days)` implements a **second,
+  different** decay model — `mastery · e^(−0.5(1 − 0.7·mastery)·days)` — that no
+  caller uses. The live forgetting model is `forgettingRisk` (§2). Keeping both
+  invites citing the wrong one; it should be deleted.
+- `ScoringEngineService.calculateImportanceScore(Topic)` returns a constant
+  `0.46` from hardcoded placeholders and has no callers.
+- `ScoringEngineService.calculatePriorityScore(...)` is the deprecated
+  fixed-weight formula, also uncalled.
 
 ## Why this is a real algorithmic contribution
 
@@ -190,6 +592,10 @@ time.
 - **Generation is grounded in retrieved evidence**: only the top-5 reranked chunks are
   sent to the LLM, citations `[Source N]` are mandatory, and the UI exposes the exact
   source pages with their retrieval and rerank scores — making answers auditable.
+- **A supervised model corrects the heuristic**: weakness is not only a formula we
+  chose, it is partly learned from ~283k real practice opportunities — while the
+  explainable evidence term stays dominant at 0.70 and the system remains fully
+  functional when the model is absent.
 
 ## HTTP API surface
 
@@ -204,11 +610,11 @@ identifier route is ownership-checked against the JWT caller.
 | Quizzes | GET `/quizzes/topic/{topicId}` - GET `/quizzes/{quizId}` - POST `/quizzes/{quizId}/submit` - GET `/quizzes/progress?pdfId=` |
 | Dashboard | GET `/dashboard` - GET `/dashboard/pdf/{pdfId}` |
 | Analytics | GET `/analytics/performance` - `/analytics/topic/{topicId}` - `/analytics/comparison` |
-| Planner / plans | GET `/planner` - GET `/recommendations/next-topics?limit` - `/recommendations/insights` - `/recommendations/schedule?daysAhead` - POST `/study-plan/generate` |
+| Planner / plans | GET `/planner` (adaptive) - GET `/recommendations/next-topics?limit` - `/recommendations/insights` - `/recommendations/schedule?daysAhead` (legacy formula) - POST `/study-plan/generate` (stateless experiment; unused by the UI) |
 | RAG | POST `/rag/ask {question, pdfId?}` - GET `/rag/predefined?pdfId=` (Quick Answers) |
 | Reports | GET `/reports/study-report` |
 | Admin (ADMIN) | GET `/admin/dashboard` - `/admin/entities` - `/admin/entities/{name}` - `/admin/entities/{name}/{id}` - DELETE `/admin/entities/{name}/{id}` |
-| Health | GET `/health` |
+| Health | GET `/health` — also reports `weaknessModel` (`live`/`unavailable`/`disabled`) and whether scoring is hybrid or evidence-only |
 
 ## Security & multi-tenancy model
 
@@ -261,6 +667,8 @@ expiry, multipart 50 MB limits, logging levels).
 | `GOOGLE_CLIENT_ID` / frontend `VITE_GOOGLE_CLIENT_ID` | Google sign-in |
 | `SMTP_ENABLED` `SMTP_FROM` `SMTP_HOST` `SMTP_PORT` `SMTP_USERNAME` `SMTP_PASSWORD` (+ auth/starttls/timeout props) | OTP e-mail delivery; when disabled codes are logged server-side if `OTP_LOG_CODES=true` |
 | `OTP_EXPIRATION_MINUTES` `OTP_RESEND_COOLDOWN_SECONDS` | challenge lifetime / resend throttle |
+| `ML_WEAKNESS_ENABLED` `ML_WEAKNESS_URL` `ML_WEAKNESS_TIMEOUT_MS` | weakness-model service (default `true` / `http://localhost:8000` / `1500` ms; compose overrides the URL to `http://ml-service:8000`) |
+| `MODEL_PATH` (ml-service) | joblib location inside the inference container (default `/app/models/weakness_model.joblib`) |
 | `VITE_API_URL` | frontend API base |
 
 ## Running the project from scratch
@@ -273,13 +681,96 @@ pgvector extension).
    PostgreSQL after running `CREATE EXTENSION IF NOT EXISTS vector`.
 2. Backend config: create `backend/.env` from `.env.example`;
    `GEMINI_API_KEY` is required for analysis/embeddings/RAG.
-3. Start the API: `cd backend && mvn spring-boot:run` -> port 9096.
-4. Start the UI: `cd frontend && npm install && npm run dev` -> port 3000
+3. Weakness model (optional but required for hybrid scoring):
+   ```
+   cd ml
+   python -m venv .venv && .venv/Scripts/activate     # Linux/macOS: source .venv/bin/activate
+   pip install -r requirements.txt
+   python train_model.py                              # writes models/weakness_model.joblib
+   uvicorn serve:app --port 8000                      # serves it at :8000
+   ```
+   Training needs `ml/data/skill_builder_data.csv` (ASSISTments skill-builder,
+   gitignored for size). Skip this step entirely and the backend scores weakness
+   from evidence alone — everything else works unchanged.
+4. Start the API: `cd backend && mvn spring-boot:run` -> port 9096.
+   Confirm the model is wired in: `curl localhost:9096/api/health` should report
+   `"weaknessModel":"live"`.
+5. Start the UI: `cd frontend && npm install && npm run dev` -> port 3000
    (dev proxy forwards `/api` to 9096). Production bundle: `npm run build`.
-5. Tests: `mvn test` (default suite; the live-database retrieval class skips
-   itself). Opt-in integration: with Postgres up, set `RAG_INTEGRATION_TEST=true`
-   and run `mvn test -Dtest=RagRetrievalIntegrationTest`.
-6. Full stack in containers: `docker compose up --build`.
+6. Tests: `mvn test` (default suite; both integration classes skip themselves).
+   Opt-in: with Postgres up, `RAG_INTEGRATION_TEST=true mvn test -Dtest=RagRetrievalIntegrationTest`;
+   with the model service up, `ML_INTEGRATION_TEST=true mvn test -Dtest=MlWeaknessClientIntegrationTest`.
+7. Full stack in containers: `docker compose up --build` (starts postgres,
+   ml-service, backend and frontend; `./ml/models` is mounted read-only into the
+   inference container).
+
+## Key design decisions and why
+
+The choices a reader is most likely to question, with the reasoning behind each.
+
+| Decision | Why | What it costs |
+|---|---|---|
+| **Retrieve passages instead of sending the whole PDF** | A 60-page document exceeds practical context limits, costs more per call, and dilutes the model's attention. Retrieving the 5 best passages makes answers sharper *and* makes citation possible — you cannot cite a page if you sent the whole book. | A bad retrieval means a bad answer even when the document contains the fact. |
+| **Store embeddings in Postgres via pgvector** | Retrieval becomes a SQL join, so ownership filtering (`WHERE pd.user_id = ?`) happens *inside* the same query as the similarity search. A separate vector database would require duplicating the permission model. | Bound to Postgres; no dedicated ANN index until the column becomes a native `vector(768)`. |
+| **Retrieve 20 candidates but send only 5** | Recall and precision are different problems. Vector search casts a wide net; the hybrid reranker then promotes passages that literally answer the question. | One extra ranking pass per query. |
+| **Process uploads asynchronously** | Extraction, embedding and LLM analysis take tens of seconds. Blocking the HTTP response would look broken and risks gateway timeouts. | Requires status tracking and a polling client. |
+| **Derive priority from measured evidence, never self-rating** | The core thesis: students misjudge their own weak areas, and a manual rating is stale the moment it is entered. | Priorities are meaningless until the student answers something — hence the diagnostic quiz. |
+| **Blend a trained model at only 0.30** | The model was trained on a different population (ASSISTments), so it contributes a transferable signal rather than course knowledge. The dominant term stays explainable, which matters when the app tells a student what to revise. | The model's contribution is capped even where it might be more accurate. |
+| **Make the ML service optional** | An enhancement must not become a single point of failure on the quiz-submission path. | Silent degradation — hence the `weaknessModel` field on `/api/health`. |
+| **One active PDF per user** | Keeps the learner model unambiguous: one exam date, one topic set, one ranking. Multi-document merging raises questions (shared topics? separate plans?) beyond this project's scope. | Uploading a second PDF replaces the first. |
+| **Stateless JWT rather than server sessions** | No session store to synchronise; any backend instance can serve any request. | No server-side revocation — a stolen token is valid until it expires. |
+
+## Data lifecycle
+
+What exists, when it is created, and how it goes away.
+
+| Stage | What happens |
+|---|---|
+| **Upload** | The PDF file is written to `uploads/pdfs` on local disk; a `pdf_documents` row records the path, exam date and `PENDING` status. Text is extracted at upload time and stored in `extracted_text`. |
+| **Processing** | `document_chunks` rows are created with their embeddings, then `topics` and `quizzes`. Status becomes `COMPLETED`, or `FAILED` with a stored reason. |
+| **Studying** | Each answer appends a `quiz_attempts` row and a write-only `review_log` entry, and updates the single `study_progress` row for that (user, topic). |
+| **Replacement** | Uploading a new PDF transactionally removes the previous document and everything derived from it. |
+| **Deletion** | `DELETE /api/pdfs/{id}` removes one document; `DELETE /api/pdfs/reset` clears the caller's entire study set. `AdminDeletionService` handles FK-safe removal in the right order. |
+| **Retention** | Nothing expires on a timer. OTP challenges carry an expiry and are single-use, but rows persist until explicitly deleted. |
+
+Everything a student generates hangs off their `users` row by foreign key, so
+account-scoped deletion is a bounded, well-defined operation rather than a
+best-effort sweep.
+
+## Non-goals
+
+Deliberately out of scope — these are decisions, not gaps:
+
+- **Not a classroom tool.** No instructor view, cohort analytics, or shared
+  content. One student, one account, one study set.
+- **Not a general chatbot.** The RAG prompt refuses to answer beyond the uploaded
+  document. "The provided study material does not contain enough information" is
+  correct behaviour, not a failure.
+- **Not a document library.** One active PDF per user; this is a revision tool
+  for one exam, not a knowledge base.
+- **Not an OCR pipeline.** Scanned image-only PDFs are unsupported; the document
+  must carry a real text layer.
+- **Not a content authority.** Topics, quizzes and answers derive from the
+  student's own uploaded material. Bad notes in, bad questions out.
+
+## Glossary
+
+| Term | Meaning here |
+|---|---|
+| **RAG** | Retrieval-Augmented Generation — retrieve relevant passages first, then have the LLM answer *using only those passages*. |
+| **Embedding** | A 768-number vector representing a passage's meaning; similar meanings sit close together, so search becomes geometry. |
+| **pgvector** | The PostgreSQL extension providing the vector type and the cosine-distance operator `<=>`. |
+| **Chunk** | One ~512-token passage of the PDF; the unit that is embedded, retrieved and cited. |
+| **Reranking** | A second scoring pass over retrieved candidates, mixing vector similarity with keyword and title signals. |
+| **BKT** | Bayesian Knowledge Tracing — updates the probability a skill is mastered after each answer, allowing for guessing and slipping. |
+| **Mastery** | `P(the student knows this topic)`, 0–1. Estimated, never declared. |
+| **Weakness** | How urgently a topic needs work, 0–1. Derived from error rate, mastery gap, response time, overdue reviews, and the trained model. |
+| **Priority** | The final ranking score that orders the study plan; combines mastery gap, forgetting risk, exam urgency and topic importance. |
+| **Forgetting risk** | `1 − e^(−λ·days)` — the modelled chance the topic has decayed since it was last reviewed. |
+| **SM-2** | The SuperMemo-2 spaced-repetition algorithm deciding when a topic is next due. |
+| **Ease factor (EF)** | SM-2's per-topic multiplier controlling how fast review intervals grow. |
+| **Diagnostic vs practice** | Diagnostic is the first pass that establishes a baseline; practice is ongoing work driven by the plan. |
+| **Fail-soft** | A dependency whose absence degrades a feature without failing the request. |
 
 ## Known limitations (by design, today)
 
@@ -292,7 +783,30 @@ pgvector extension).
   column plus an HNSW index is the planned scale-up.
 - Revision-schedule labels fall back to weakness/mastery heuristics only for
   topics that have never been attempted.
-- The trained joblib classifier remains an offline experiment.
+- The trained classifier is served by a **separate Python process**, so the
+  hybrid path needs `ml-service` running. Its artifact and training CSV are
+  gitignored (30 MB / 83 MB), so a fresh clone scores evidence-only until
+  `train_model.py` has been run once.
+- Model predictions are computed **per quiz submission** and not cached; the
+  client batches and applies a 60 s cooldown after repeated failures, but there
+  is no persistent store of past predictions for offline audit.
+- The served model is the one trained on ASSISTments, a **different population**
+  from AASA's users: it transfers a general "practice history → next-answer
+  correctness" signal, not course-specific knowledge. That is why it is weighted
+  0.30 against 0.70 for the learner's own measured evidence.
+- **Two ranking engines coexist.** `/api/planner` uses the adaptive algorithm,
+  but `/api/recommendations/**` (called by the Study page) still ranks with the
+  deprecated fixed-weight formula in `RecommendationEngineService`. Migrating it
+  onto `AdaptivePriorityService` is outstanding work, not a design choice.
+- `ScoringEngineService.calculateImportanceScore(Topic)` and
+  `calculatePriorityScore(...)` have no callers; the live importance figure comes
+  from Gemini, falling back to `TopicAnalysisService.calculateImportanceScore(signals)`.
+  `OllamaAiService` is likewise unreferenced. All are dead code pending removal.
+- `backend/src/main/resources/init.sql` and `seed_admin.sql` still contain the
+  retired `admin@aasa.com` / `admin123` seed. Spring Boot does not auto-run files
+  under those names and docker-compose mounts only `docs/schema.sql`, so they are
+  inert — but they contradict the *No default accounts* policy above and should
+  be deleted.
 - No rate limiting, refresh tokens or frontend test suite yet; local-disk
   uploads need a mounted volume in cloud deployments.
 
