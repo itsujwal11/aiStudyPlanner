@@ -4,6 +4,7 @@ import { pdfAPI } from '../api'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { Upload, AlertCircle, CheckCircle, Loader, ArrowLeft } from 'lucide-react'
+import { triggerBackgroundPoll } from '../hooks/useBackgroundProcessingNotifications'
 
 export const UploadPdf = () => {
   const [file, setFile] = useState(null)
@@ -43,6 +44,9 @@ export const UploadPdf = () => {
       setExamDate('')
       setSuccess('PDF uploaded. AI analysis runs in the background - you will receive a notification here as soon as your topics and quizzes are ready.')
       toast.success('Uploaded! We will notify you when analysis finishes.')
+
+      // Trigger background polling to resume since we now have a PENDING/PROCESSING PDF
+      triggerBackgroundPoll()
 
       setTimeout(() => {
         setProgress({ stage: '', percentage: 0 })

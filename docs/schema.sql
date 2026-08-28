@@ -26,6 +26,7 @@ CREATE SEQUENCE quiz_attempt_id_seq    START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE study_progress_id_seq  START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE chunk_id_seq           START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE review_log_id_seq      START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE planner_task_completion_id_seq START WITH 1 INCREMENT BY 1;
 
 -- Users
 CREATE TABLE users (
@@ -166,7 +167,25 @@ CREATE TABLE document_chunks (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Planner task ticks — one row per task the student marks done, per calendar
+-- day. Keyed by topic + activity + session rather than list position, because
+-- the plan is re-ranked after every quiz answer.
+CREATE TABLE planner_task_completions (
+    id BIGINT PRIMARY KEY DEFAULT nextval('planner_task_completion_id_seq'),
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    topic_id BIGINT NOT NULL,
+    activity_type VARCHAR(20) NOT NULL,
+    completion_date DATE NOT NULL,
+    session_index INTEGER NOT NULL DEFAULT 0,
+    completed BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    CONSTRAINT uk_planner_task_completion
+        UNIQUE (user_id, topic_id, activity_type, completion_date, session_index)
+);
+
 -- Indexes
+CREATE INDEX idx_planner_completion_user_date ON planner_task_completions(user_id, completion_date);
 CREATE INDEX idx_pdf_user ON pdf_documents(user_id);
 CREATE INDEX idx_topic_pdf ON topics(pdf_id);
 CREATE INDEX idx_quiz_topic ON quizzes(topic_id);

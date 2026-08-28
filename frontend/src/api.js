@@ -94,6 +94,10 @@ export const recommendationAPI = {
 
 export const plannerAPI = {
   get: () => api.get('/planner'),
+  // Persist a task tick for today. Server keys it by topic+activity+session,
+  // so it survives the plan being re-ranked after a quiz answer.
+  toggleTask: ({ topicId, activityType, sessionIndex = 0, completed }) =>
+    api.post('/planner/tasks/toggle', { topicId, activityType, sessionIndex, completed }),
 };
 
 export const studyPlanAPI = {
