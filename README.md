@@ -303,5 +303,5 @@ MIT License — see [`LICENSE`](LICENSE) for details.
 
 ## Contact
 
-**Author:** Pasang Gelbu Sherpa  
+**Author:** Ujwol Shrestha 
 **Project Link:** https://github.com/itsujwal11/aiStudyPlanner
