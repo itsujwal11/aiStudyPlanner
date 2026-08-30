@@ -60,3 +60,11 @@ __pycache__/
 ml/data/
 ml/models/*.joblib
 ml.zip
+
+# AI coding tool configs (keep out of repo)
+.agents/
+.claude/
+.codex/
+.sixth/
+.cursor/
+.aider*
