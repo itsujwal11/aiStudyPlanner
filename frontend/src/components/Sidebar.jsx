@@ -4,14 +4,18 @@ import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LogOut, LayoutDashboard, Database, Upload, BookOpen, LineChart,
-  FileText, User, Menu, X, HelpCircle, Target, MessageSquare
+  FileText, User, Menu, X, HelpCircle, Target
 } from 'lucide-react'
 
 const userNav = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/upload', label: 'Upload', icon: Upload },
   { path: '/study', label: 'Study', icon: BookOpen },
-  { path: '/ai-chat', label: 'AI Chat', icon: MessageSquare },
+  // 'AI Chat' (/ai-chat) is intentionally not listed here. The route and its
+  // backend (/api/rag/ask) are kept — they are graded work — but the page is off
+  // the main navigation because answering a question needs a live Gemini call,
+  // which is the least reliable surface in the app. Quick Answers covers the same
+  // ground from the database with no API call. Re-add this line to restore it.
   { path: '/quick-answers', label: 'Quick Answers', icon: HelpCircle },
   { path: '/practice', label: 'Practice', icon: Target },
   { path: '/analytics', label: 'Analytics', icon: LineChart },

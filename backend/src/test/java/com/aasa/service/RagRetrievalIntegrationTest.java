@@ -21,10 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Integration proof for the real pgvector retrieval layer of the RAG pipeline.
+ * Integration proof for the real retrieval layer of the RAG pipeline.
  *
- * OPT-IN: requires a running Postgres that has `CREATE EXTENSION vector` applied.
+ * OPT-IN: requires a running Postgres pointed at by the app's datasource.
  * Enable with:  set RAG_INTEGRATION_TEST=true   (then run `mvn test`)
+ *
+ * Runs against whichever backend VectorSearchService selects: pgvector SQL when
+ * `CREATE EXTENSION vector` has been applied, otherwise the Java cosine
+ * fallback. Both must satisfy the same three properties, so this suite is a
+ * useful check either way — and on a plain local Postgres it is the only test
+ * that exercises the fallback against real rows.
  *
  * Proves three properties the reviewer cares about:
  *  1. semantic ranking with non-zero cosine similarities,

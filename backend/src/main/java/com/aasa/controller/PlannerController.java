@@ -33,13 +33,20 @@ public class PlannerController {
     private PlannerTaskCompletionService completionService;
 
     @GetMapping
-    public ResponseEntity<PlannerDto> getPlanner(Authentication authentication) {
+    public ResponseEntity<?> getPlanner(Authentication authentication) {
+        // Without this an unauthenticated call NPEs on authentication.getName()
+        // and is reported as a 500, which reads as a server fault rather than a
+        // missing session. Matches the toggle endpoint below.
+        if (authentication == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Not signed in"));
+        }
         try {
             User user = authService.getUserByEmail(authentication.getName());
             PlannerDto planner = plannerService.generatePlanner(user);
             return ResponseEntity.ok(planner);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.log(Level.SEVERE, "Failed to build planner", e);
             return ResponseEntity.internalServerError().build();
         }
     }

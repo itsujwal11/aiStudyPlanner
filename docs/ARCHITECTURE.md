@@ -61,22 +61,33 @@ The whole product in one pass, with the route each step lives on:
    switched tabs) tells them when it's ready.
 3. **Behind the scenes**: the text is extracted, split into ~512-token passages,
    embedded into vectors, and stored; then Gemini reads the document and returns
-   the major topics with descriptions, importance and complexity, plus MCQ
-   questions per topic.
+   the major topics with descriptions, importance and complexity, plus six MCQs
+   per topic (2 easy / 2 medium / 2 hard). This is the entire question bank —
+   it is generated once and never grows.
 4. **See what's in the document** (`/pdf/:id`, `/study/:id`) — the topic list with
    descriptions, complexity and importance.
 5. **Take the diagnostic quiz** (`/diagnostic/:id`). This is the step that
    bootstraps the whole adaptive loop: until the student answers something, the
-   system has no evidence and every topic looks equally urgent.
+   system has no evidence and every topic looks equally urgent. It asks three
+   questions each — one per difficulty where available — about the first seven
+   topics, so every topic it covers clears
+   `WeaknessEngineService.MINIMUM_EVIDENCE_ATTEMPTS` and gets a real weakness
+   band instead of `INSUFFICIENT_DATA`. Depth is deliberate: one question spread
+   across many topics measures none of them.
 6. **Read the plan** (`/planner`) — today's tasks, a roadmap to the exam date, a
    revision schedule with real due dates, and recommendations. Every item is
    ranked by measured evidence, and the ordering changes after each answer.
 7. **Practise** (`/practice`) — more questions on the topics the plan says matter
    most. Each answer updates mastery, weakness, and the next review date.
-8. **Ask questions** (`/ai-chat`) — free-form questions answered *only* from the
+8. **Ask questions** (`/quick-answers`) — pre-built topic overviews assembled
+   from stored topics, so they cost no API call and cannot fail on a quota or a
+   timeout. Free-form RAG lives at `/ai-chat`: questions answered *only* from the
    uploaded document, with a Sources panel naming the file, page and relevance of
-   each passage used. `/quick-answers` offers pre-built topic overviews that cost
-   no API call at all.
+   each passage used. That route and `/api/rag/ask` are fully implemented and
+   tested, but deliberately **left off the sidebar** — every answer needs a live
+   Gemini generation call, the least reliable surface in the app, and
+   `/quick-answers` covers the same ground from the database. Reachable by URL;
+   restore the nav entry in `Sidebar.jsx` to put it back.
 9. **Track progress** (`/dashboard`, `/analytics`) and **export** a study report
    as JSON or CSV (`/reports`).
 
@@ -156,10 +167,10 @@ scalable.
 ```
 backend/src/main/java/com/aasa/
     controller/   REST endpoints (13 controllers)
-    service/      business logic (34 services)
-    repository/   Spring Data JPA interfaces (9)
-    entity/       JPA entities (9 tables)
-    dto/          request/response payloads (36)
+    service/      business logic (36 services)
+    repository/   Spring Data JPA interfaces (10)
+    entity/       JPA entities (10 tables)
+    dto/          request/response payloads (37)
     security/     JWT provider + filter, CustomUserDetailsService
     config/       SecurityConfig, AsyncConfig, exception handlers
 frontend/src/     pages (17) - components (7) - context - hooks - api.js
@@ -274,7 +285,9 @@ flowchart TB
   for `ml/serve.py`, with a failure cooldown so a dead service never stalls
   quiz submission)
 - **Planning cluster** - `PlannerService` (live recompute; the adaptive
-  algorithm), `RecommendationEngineService` (serves `/api/recommendations/**`;
+  algorithm), `PlannerTaskCompletionService` (the one piece of planner state
+  that *is* persisted - which tasks the student ticked off, per day),
+  `RecommendationEngineService` (serves `/api/recommendations/**`;
   still ranks with the **legacy fixed-weight** formula
   `0.35·complexity + 0.25·importance + 0.25·weakness + 0.15·urgency`, not
   `AdaptivePriorityService` — see *Known limitations*), `StudyPlanService`
@@ -296,7 +309,7 @@ application pipeline.
 | 2. Data Understanding | `prepare_data()` profiles `skill_builder_data.csv`: 525,534 raw → 283,105 usable rows, 4,163 students | Uploaded PDFs must expose a real text layer; learner-event schema designed around attempts/progress |
 | 3. Data Preparation | Cleaning, dedup by `order_id`, response-time sanitising, leakage-safe features via `shift(1)` | `PdfExtractionService` → `TextChunkingService` → `EmbeddingService` → pgvector persistence |
 | 4. Modeling | Logistic Regression vs Random Forest scikit-learn pipelines | BKT posterior, exponential forgetting curve, `AdaptivePriorityService`, `WeaknessEngineService`, modified SM-2, hybrid RAG reranker |
-| 5. Evaluation | Student-wise split (no student in two sets); validation selects the winner, held-out test reports F1 0.734 / ROC-AUC 0.705 | 64 automated tests across 12 suites, incl. two opt-in integration suites — live pgvector retrieval (3 cases, `RAG_INTEGRATION_TEST=true`) and live model inference (6 cases, `ML_INTEGRATION_TEST=true`); RAG Hit@5 / MRR@5 procedure |
+| 5. Evaluation | Student-wise split (no student in two sets); validation selects the winner, held-out test reports F1 0.734 / ROC-AUC 0.705 | 76 automated tests across 14 suites, incl. two opt-in integration suites — live retrieval (3 cases, `RAG_INTEGRATION_TEST=true`) and live model inference (6 cases, `ML_INTEGRATION_TEST=true`). Retrieval is evaluated by property (ranking, ordering, per-user scoping), not yet by a labelled IR benchmark — Hit@5 / MRR@5 over a hand-labelled question set is outstanding work |
 | 6. Deployment | Serialized to `models/weakness_model.joblib` + `reports/metrics.json`, then **served live** by `ml/serve.py` (FastAPI) and consumed by the backend | Docker Compose: React SPA + Spring Boot API + ML inference service + PostgreSQL/pgvector; Vercel/Render deployment configs |
 
 > **Honest status:** the trained classifier is now **live** — every graded quiz
@@ -327,6 +340,7 @@ time.
 | `study_progress` | weakness_level LOW/MEDIUM/HIGH/INSUFFICIENT_DATA/NOT_ATTEMPTED, completion_percentage, best_score, total/correct_attempts, mastery_level, alpha_param (2.0), beta_param (8.0), sm2_interval, sm2_efactor (2.5), sm2_repetitions, last_study_date, next_review_date | unique (user, topic) |
 | `document_chunks` | chunk_index, chunk_text, estimated page, embedding (TEXT vector literal) | 1/pdf; forms the RAG index |
 | `review_log` | review_type, rating 1-4, response_time_ms, scheduled_days, actual_interval, mastery_before/after, created_at (@PrePersist) | user x topic history |
+| `planner_task_completions` | topic_id, activity_type LEARN/REVISION/PRACTICE, completion_date, session_index, completed | unique (user, topic, activity, date, session); the planner's only persisted state |
 
 ## Hybrid weakness scoring — how the trained model is wired in
 
@@ -551,13 +565,89 @@ similarity  = 1 − (embedding <=> queryEmbedding)     // pgvector cosine distan
 rerankScore = 0.70·similarity + 0.20·keywordOverlap + 0.10·titleMatch
 ```
 
+Two interchangeable retrieval backends produce that `similarity`, chosen by a
+one-time probe of `pg_type` for the `vector` type:
+
+| pgvector installed | Backend | Cost |
+|---|---|---|
+| yes | cosine distance `<=>` evaluated in SQL | indexable, work stays in the database |
+| no | the same cosine computed in Java over the owner's chunks | one pass over the rows, capped at 5 000 |
+
+Ranking is identical either way, so a database without the extension loses
+performance, not answers. The SQL attempt runs in its own `REQUIRES_NEW`
+transaction (`PgVectorSupport`) so a failed vector cast cannot mark the caller's
+transaction rollback-only — without that isolation a missing extension surfaced
+as an HTTP 500 from `/api/rag/ask` rather than a degraded answer.
+
 Top-20 candidates retrieved, top-5 kept for generation (top-8 for quiz context).
-Chunking: `2048` chars target, `200` char overlap, max `500` chars per document,
+Chunking: `2048` chars target, `200` char overlap, max `500` chunks per document,
 cut at paragraph then sentence boundaries.
+
+### 11. Planner generation — `PlannerService`
+
+Everything on `/planner` is recomputed from current evidence on every request.
+No plan is stored; the only persisted planner state is which tasks the student
+ticked off (§12).
+
+**Today's list** — four passes over the priority-sorted topics, one block per
+topic, stopping at `5` blocks:
+
+| Pass | Condition | Activity | Duration |
+|---|---|---|---|
+| 1 | `mastery < 50` **and** `weakness > 0.5` | `LEARN` | scaled (below) |
+| 2 | `50 <= mastery < 75` | `REVISION` | `30` min |
+| 3 | `importance >= 0.8` **and** `mastery < 90` | `PRACTICE` | `25` min |
+| 4 | `mastery >= 90` | `REVISION` | `15` min |
+
+```
+durationMinutes = min(25 + complexity·35 + weakness·30, 90)
+```
+
+> **Corrected defect.** A hard topic used to emit *two* identical 45-minute
+> `LEARN` rows labelled "split into smaller sessions", which the UI could only
+> render as the same task listed twice. One block now carries the extra time
+> through the scaling formula above instead of duplicating the row.
+
+**Roadmap** — `min(daysUntilExam, 14)` days, falling back to `7` when the exam
+date has passed; `daysUntilExam` is `30` when the user has no PDF with a date.
+
+> **Corrected defect.** Day 1 of the roadmap and the Today list were two
+> independent generators, so the same date showed different topics, activities
+> and durations in the two panels. Day 1 now mirrors today's tasks verbatim.
+
+**Days 2..n** carry `LEARN` for the topics that still need it, then alternate
+`PRACTICE` on every third day (`day % 3 == 0`) and `REVISION` otherwise.
+`practiceDays` is simply the set of roadmap days holding a `PRACTICE`
+activity, which is what the UI marks as a self-test checkpoint.
+
+Note that `WeakTopicAnalysis.recommendedDuration` — the advisory string shown
+next to a topic — uses a *different*, deliberately looser estimator
+(`30 + complexity·60 + weakness·45`, suggesting a 2-session split above 90 min).
+It is advice about a topic; the table above schedules a block.
+
+### 12. Task completion tracking — `PlannerTaskCompletionService`
+
+The plan is re-ranked after every quiz answer, so a task's position is not a
+stable identity. Ticks are keyed on what the student was asked to do instead:
+
+```
+taskKey = topicId + ":" + activityType + ":" + sessionIndex
+```
+
+`GET /planner` loads the ticks for today and stamps `completed` onto each task
+and onto Day 1 of the roadmap. `POST /planner/tasks/toggle` writes one tick,
+scoped to the JWT caller and to `LocalDate.now()`.
+
+Absence is the default: un-ticking deletes nothing but sets `completed = false`
+on an existing row, and ticking a task that has no row inserts one — a task with
+no row is simply not done. The unique constraint
+`(user_id, topic_id, activity_type, completion_date, session_index)` makes the
+toggle idempotent, and because the date is part of the key, yesterday's ticks
+never mark today's plan complete.
 
 ### Invariants
 
-Every weighted formula above sums to exactly `1.0` and clamps its result to
+Every *scoring* formula above sums to exactly `1.0` and clamps its result to
 `[0,1]`, so no score can leave its declared range:
 
 | Formula | Weights | Σ |
@@ -570,16 +660,28 @@ Every weighted formula above sums to exactly `1.0` and clamps its result to
 | Complexity | 0.4 / 0.3 / 0.2 / 0.1 | 1.00 |
 | Importance (fallback) | 0.6 / 0.4 | 1.00 |
 
+The two duration estimators in §11 are deliberately outside this rule: they
+produce minutes, not scores, so their coefficients are magnitudes rather than
+weights and are bounded by an explicit cap (`90` min) instead of normalisation.
+
 ### Unused algorithmic code
 
 - `MasteryService.predictedRetention(mastery, days)` implements a **second,
   different** decay model — `mastery · e^(−0.5(1 − 0.7·mastery)·days)` — that no
   caller uses. The live forgetting model is `forgettingRisk` (§2). Keeping both
   invites citing the wrong one; it should be deleted.
+- `WeaknessEngineService.calculateWeaknessLevel(Double)` is public and uncalled,
+  and it bands on an **inverted 0–100 scale** (`>= 75 → LOW`, `>= 50 → MEDIUM`,
+  else `HIGH`) — a score-as-percentage-correct reading. The live banding is
+  `levelForScore` (§6), where a *high* number means *high weakness*
+  (`>= 0.65 → HIGH`). The two read opposite ways round, so this is the dead
+  method most likely to be quoted by mistake; it should be deleted.
 - `ScoringEngineService.calculateImportanceScore(Topic)` returns a constant
   `0.46` from hardcoded placeholders and has no callers.
 - `ScoringEngineService.calculatePriorityScore(...)` is the deprecated
   fixed-weight formula, also uncalled.
+- `frontend/src/components/Navigation.jsx` is imported by nothing (`Sidebar.jsx`
+  is the live navigation) and still advertises a `/recommendations` entry.
 
 ## Why this is a real algorithmic contribution
 
@@ -610,10 +712,10 @@ identifier route is ownership-checked against the JWT caller.
 | Quizzes | GET `/quizzes/topic/{topicId}` - GET `/quizzes/{quizId}` - POST `/quizzes/{quizId}/submit` - GET `/quizzes/progress?pdfId=` |
 | Dashboard | GET `/dashboard` - GET `/dashboard/pdf/{pdfId}` |
 | Analytics | GET `/analytics/performance` - `/analytics/topic/{topicId}` - `/analytics/comparison` |
-| Planner / plans | GET `/planner` (adaptive) - GET `/recommendations/next-topics?limit` - `/recommendations/insights` - `/recommendations/schedule?daysAhead` (legacy formula) - POST `/study-plan/generate` (stateless experiment; unused by the UI) |
+| Planner / plans | GET `/planner` (adaptive) - POST `/planner/tasks/toggle {topicId, activityType, completed, sessionIndex?}` (ticks a task off today's list) - GET `/recommendations/next-topics?limit` - `/recommendations/insights` - `/recommendations/schedule?daysAhead` (legacy formula) - POST `/study-plan/generate` (stateless experiment; unused by the UI) |
 | RAG | POST `/rag/ask {question, pdfId?}` - GET `/rag/predefined?pdfId=` (Quick Answers) |
 | Reports | GET `/reports/study-report` |
-| Admin (ADMIN) | GET `/admin/dashboard` - `/admin/entities` - `/admin/entities/{name}` - `/admin/entities/{name}/{id}` - DELETE `/admin/entities/{name}/{id}` |
+| Admin (ADMIN) | GET `/admin/dashboard` - `/admin/entities` - `/admin/entities/{name}` - DELETE `/admin/entities/{name}/{id}` |
 | Health | GET `/health` — also reports `weaknessModel` (`live`/`unavailable`/`disabled`) and whether scoring is hybrid or evidence-only |
 
 ## Security & multi-tenancy model
@@ -673,12 +775,14 @@ expiry, multipart 50 MB limits, logging levels).
 
 ## Running the project from scratch
 
-Prerequisites: JDK 17, Maven, Node 18+, Docker (or any PostgreSQL with the
-pgvector extension).
+Prerequisites: JDK 17, Maven, Node 18+, Docker (or any PostgreSQL — pgvector is
+recommended for indexed retrieval but not required; without it
+`VectorSearchService` computes the same cosine ranking in Java).
 
 1. Database: `docker compose up -d postgres` (image already contains the
    `vector` extension and applies `docs/schema.sql`), or point at your own
-   PostgreSQL after running `CREATE EXTENSION IF NOT EXISTS vector`.
+   PostgreSQL. `CREATE EXTENSION IF NOT EXISTS vector` is optional — the app
+   logs one warning at first search and uses the Java fallback if it is absent.
 2. Backend config: create `backend/.env` from `.env.example`;
    `GEMINI_API_KEY` is required for analysis/embeddings/RAG.
 3. Weakness model (optional but required for hybrid scoring):
@@ -780,7 +884,9 @@ Deliberately out of scope — these are decisions, not gaps:
 - Gemini availability/quota gates topic, quiz and RAG generation; graceful
   failure states are returned instead of ungrounded answers.
 - Embeddings live as TEXT literals cast per query; a native `vector(768)`
-  column plus an HNSW index is the planned scale-up.
+  column plus an HNSW index is the planned scale-up. Without the pgvector
+  extension retrieval still works but scans the owner's chunks in Java, so it
+  degrades linearly with corpus size.
 - Revision-schedule labels fall back to weakness/mastery heuristics only for
   topics that have never been attempted.
 - The trained classifier is served by a **separate Python process**, so the
@@ -807,6 +913,12 @@ Deliberately out of scope — these are decisions, not gaps:
   under those names and docker-compose mounts only `docs/schema.sql`, so they are
   inert — but they contradict the *No default accounts* policy above and should
   be deleted.
+- **Retrieval quality is tested by property, not benchmarked.** The integration
+  suite proves ranking is semantic, that different queries reorder results, and
+  that scoping never leaks across users — but there is no labelled
+  question→passage set, so no Hit@5 / MRR@5 figure exists for the RAG half. The
+  reranker's contribution is demonstrated live (`rank` vs `retrievalRank` in the
+  Sources panel) rather than measured in aggregate.
 - No rate limiting, refresh tokens or frontend test suite yet; local-disk
   uploads need a mounted volume in cloud deployments.
 

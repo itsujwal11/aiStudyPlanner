@@ -14,16 +14,16 @@ AI/ML, algorithms, chunking, embedding, retrieval, reranking are used.
 ```mermaid
 flowchart LR
     subgraph Client["Frontend - React 18 + Vite"]
-        UI[Pages - Dashboard, Study, AI Chat, Quiz,<br/>Planner, Reports, Analytics]
+        UI[Pages - Dashboard, Upload, Study, Quick Answers,<br/>Practice, Planner, Reports, Analytics<br/>+ AI Chat, off-nav at /ai-chat]
     end
 
     subgraph Backend["Backend - Spring Boot Java 17, port 9096"]
         API[REST Controllers - JWT secured]
-        SVC[Service Layer - 34 services]
+        SVC[Service Layer - 36 services]
     end
 
     subgraph Data["Data Layer"]
-        PG[("PostgreSQL 17 + pgvector<br/>Docker container, port 5432")]
+        PG[("PostgreSQL 17, port 5432<br/>+ pgvector when installed<br/>Java cosine fallback when not")]
     end
 
     subgraph ML["ML inference - local, no API cost"]
@@ -48,8 +48,8 @@ flowchart LR
 |---|---|---|
 | Frontend | React, Vite, Tailwind, Framer Motion | UI, calls `/api/**` with a JWT |
 | Backend | Spring Boot 3, Java 17 | All business logic, AI orchestration |
-| Database | PostgreSQL + **pgvector** | Relational data **+ vector similarity search** (`<=>`) |
-| Docker | `pgvector/pgvector` image | Runs the DB with the `vector` extension available |
+| Database | PostgreSQL (+ **pgvector** when installed) | Relational data **+ vector similarity search** (`<=>`); without the extension the same cosine ranking is computed in Java |
+| Docker | `pgvector/pgvector` image | Runs the DB with the `vector` extension already available |
 | AI #1 | Gemini embedding model | Text → 768-dim vectors |
 | AI #2 | Gemini flash models | Topic extraction, quizzes, explanations, RAG answers |
 | ML #3 | **Our own** Random Forest (`ml-service`) | Predicts next-answer correctness → 30% of the weakness score |
@@ -95,7 +95,7 @@ flowchart TD
 
     M --> F["STEP 4 - NLP topic extraction<br/>GeminiAiService.analyzeContent()<br/>(via TopicAnalysisService)"]
     F --> G1["Gemini returns structured JSON:<br/>topics + description + importance + complexity<br/>+ semantic signals + quiz questions"]
-    G1 --> H[Create Topic rows + save quizzes per topic]
+    G1 --> H["Create Topic rows + save quizzes per topic<br/>6 MCQs per topic: 2 easy / 2 medium / 2 hard"]
     H --> O[Status = COMPLETED<br/>PDF ready for RAG + study]
 ```
 
@@ -117,6 +117,15 @@ The prompt asks Gemini for **strict JSON only**, temperature `0.2` (low randomne
 repeatable structure), with a **model fallback chain**: `gemini-2.5-flash` →
 `2.0-flash` → `2.5-flash-lite` → `3.1-flash-lite`, plus exponential-backoff retries
 on HTTP 429/503.
+
+It also asks for exactly `GeminiAiService.QUESTIONS_PER_TOPIC` = **6** MCQs per
+topic, split **2 easy / 2 medium / 2 hard**, answerable from the supplied text
+alone and non-duplicating. That is the entire question bank for the topic: it is
+generated once, at ingestion, and never grows. The count is a floor set by the
+learner model rather than a taste decision — `WeaknessEngineService`
+`MINIMUM_EVIDENCE_ATTEMPTS = 3` means a topic needs three graded answers before
+it earns a real weakness band, and the diagnostic already spends three of them
+(§4.3), so a 3-question bank left nothing for practice.
 
 ### 2.2 Chunking algorithm in depth (`TextChunkingService`)
 
@@ -174,6 +183,12 @@ Key implementation facts (all real code):
 
 This is the core **Retrieval-Augmented Generation** pipeline:
 
+> **Where the page lives.** `/ai-chat` is fully implemented and tested but is
+> deliberately **off the sidebar** — every answer needs a live Gemini generation
+> call, the least reliable surface in the app, and `/quick-answers` covers the
+> same ground from stored topics with no API call. The route is reachable by URL;
+> restoring the nav entry is one line in `Sidebar.jsx`.
+
 ```mermaid
 sequenceDiagram
     participant U as User (AI Chat page)
@@ -183,14 +198,14 @@ sequenceDiagram
     participant V as VectorSearchService
     participant RR as RerankingService
     participant G as Gemini LLM
-    participant DB as PostgreSQL+pgvector
+    participant DB as PostgreSQL
 
     U->>C: POST /api/rag/ask {question, pdfId?}
     C->>R: answerQuestion(user, question, pdfId)
     R->>E: embed(question)  [query prefix]
     E-->>R: float[768]
     R->>V: searchByPdfId/UserId(embedding, topK=20)
-    V->>DB: ORDER BY embedding <=> query LIMIT 20
+    V->>DB: pgvector: ORDER BY embedding <=> query LIMIT 20<br/>no extension: read owner's chunks, score in Java
     DB-->>V: top-20 chunks + cosine similarity
     V-->>R: candidates (semantic rank)
     R->>RR: rerank(question, title, 20 candidates)
@@ -203,7 +218,7 @@ sequenceDiagram
     C-->>U: answer + Sources panel<br/>(file - page - relevance - rerank - rank)
 ```
 
-### 3.1 Retrieval math (pgvector cosine)
+### 3.1 Retrieval math (cosine), and the two backends that compute it
 
 ```sql
 SELECT ..., 1 - (embedding::vector <=> :queryEmbedding) AS similarity
@@ -217,8 +232,26 @@ LIMIT 20
   to a friendly [−1, 1] score (in practice ~0.4–0.9 for related text).
 - Cosine ignores vector magnitude and measures **angle = semantic direction**, the
   standard for text retrieval.
-- `searchByUserId` joins `pdf_documents` so a user can **never** retrieve another
-  user's chunks (ownership enforced inside the SQL itself).
+- `searchByUserId` scopes by owner so a user can **never** retrieve another
+  user's chunks — the SQL path joins `pdf_documents`, the fallback path reads
+  through the owner-scoped `DocumentChunkRepository.findByUserId`.
+
+**pgvector is an optimisation, not a requirement.** `VectorSearchService` probes
+`pg_type` once for the `vector` type and picks a backend accordingly:
+
+| pgvector installed | Backend | Cost |
+|---|---|---|
+| yes | the SQL above, cosine evaluated by the database | indexable, work stays in Postgres |
+| no | the *same* cosine computed in Java over the owner's chunks | one pass over the rows, capped at 5 000 |
+
+The ranking is identical either way, so a plain PostgreSQL loses performance, not
+answers. The SQL attempt runs in its own `REQUIRES_NEW` transaction
+(`PgVectorSupport`) because a failed `::vector` cast marks the *caller's*
+transaction rollback-only in Postgres — without that isolation a missing
+extension surfaced as an HTTP 500 from `/api/rag/ask` instead of a degraded
+answer. `VectorSearchFallbackTest` (7 cases) pins the fallback's ranking, its
+top-`k` cap, its handling of unusable embeddings, and the demotion path taken
+when a pgvector query fails at runtime.
 
 ### 3.2 Reranking in depth (`RerankingService`) — why top-20 → top-5
 
@@ -433,6 +466,45 @@ learner is.
 
 ---
 
+### 4.3 Bootstrapping the loop — the diagnostic quiz (`/diagnostic/:pdfId`)
+
+Everything above needs evidence to run on. Before the first answer every topic
+looks identical to the planner, so the diagnostic exists to buy the cheapest
+useful set of measurements.
+
+The rule is **depth before breadth** (`frontend/src/pages/Study.jsx`):
+
+```
+DIAGNOSTIC_ATTEMPTS_PER_TOPIC = 3
+DIAGNOSTIC_MAX_QUESTIONS      = 21
+maxTopics = floor(21 / 3) = 7      // first 7 topics, 3 questions each
+```
+
+`pickSpread()` buckets a topic's bank by EASY/MEDIUM/HARD and round-robins, so
+those three questions are one per difficulty wherever the bank allows it — which
+is also what makes the difficulty-weighted error rate in §4 meaningful.
+
+Three is not arbitrary: it is exactly
+`WeaknessEngineService.MINIMUM_EVIDENCE_ATTEMPTS`, so every topic the diagnostic
+covers crosses the threshold and receives a real `LOW`/`MEDIUM`/`HIGH` band
+instead of `INSUFFICIENT_DATA`.
+
+> **A bug that was here, and why it mattered.** The diagnostic used to walk
+> breadth-first — one question each across up to 15 topics. No topic ever reached
+> three attempts, so *every* measured topic stayed `INSUFFICIENT_DATA` (score
+> `0.6`) while the topics the quiz never showed sat at `NOT_ATTEMPTED` (score
+> `1.0`) and therefore outranked them. The plan's top recommendations were
+> exactly the topics the student had been told nothing about. Measuring seven
+> topics properly beats measuring fifteen not at all.
+
+**Practice mode** (`/practice`) reads the same bank. Once every question for the
+selected scope has been answered it stops rather than re-serving them: a
+re-answered question records a remembered answer as fresh correct evidence, and
+BKT's `guess` parameter models *guessing*, not item recall — so replaying the
+bank inflates mastery. The student is sent to `/planner` with a toast instead.
+
+---
+
 ## 5. Workflow D — Study Plan & Recommendation Generation
 
 This is where the algorithm's output becomes something the student actually sees.
@@ -450,7 +522,8 @@ flowchart TD
     F --> G["todayTasks - max 5 blocks:<br/>LEARN weakest first, then REVISION,<br/>PRACTICE, light REVISION"]
     F --> H["studyRoadmap across<br/>min daysUntilExam, 14 days"]
     F --> I["revisionSchedule reads the stored<br/>SM-2 nextReviewDate when present:<br/>Due now / Tomorrow / Review in N days<br/>fallback heuristics only for<br/>never-attempted topics"]
-    G & H & I --> J["recommendations + practiceDays<br/>recomputed live per request -<br/>no persistence, no LLM call"]
+    G & H & I --> J["recommendations + practiceDays<br/>the plan itself is recomputed live<br/>per request - never stored, no LLM call"]
+    J --> M["PlannerTaskCompletionService<br/>loads today's ticks and stamps<br/>completed onto each task"]
 
     K[RecommendationEngineService] --> L["next-topics / insights / schedule endpoints<br/>LEGACY fixed-weight formula:<br/>0.35 complexity + 0.25 importance<br/>+ 0.25 weakness + 0.15 urgency<br/>(not yet migrated to AdaptivePriorityService)"]
 ```
@@ -466,6 +539,35 @@ ranked topics) into `{summary, topicBreakdown[], recommendations[]}` for the
 Reports page, which exports it as JSON or CSV. The route is read-only,
 ownership-scoped like every other endpoint, and needs no AI call.
 
+### 5.2 Ticking tasks off (`POST /api/planner/tasks/toggle`)
+
+The plan is the only part of the system that is *not* stored — it is rebuilt
+from current evidence on every request. But the student's progress through it
+has to survive a page refresh, so one thing is persisted: which tasks they
+ticked off, in `planner_task_completions`.
+
+That creates an identity problem. The plan is re-ranked after every quiz answer,
+so "the third task in the list" means something different an hour later. Ticks
+are therefore keyed on *what the student was asked to do*, not where it sat:
+
+```
+taskKey = topicId + ":" + activityType + ":" + sessionIndex     // e.g. "42:LEARN:0"
+```
+
+`GET /api/planner` loads today's ticks into a map and stamps `completed` onto
+each task and onto Day 1 of the roadmap. `POST /api/planner/tasks/toggle` writes
+a single tick.
+
+Two details worth knowing:
+
+- **Absence means "not done."** Ticking a task with no row inserts one;
+  un-ticking sets `completed = false` on the existing row. Nothing has to be
+  pre-seeded when the plan changes shape.
+- **The date is part of the key.** The unique constraint is
+  `(user_id, topic_id, activity_type, completion_date, session_index)`, so the
+  toggle is idempotent and yesterday's ticks can never mark today's plan
+  complete.
+
 ---
 
 ## 6. Master Map — Where Every Technique Lives
@@ -478,8 +580,8 @@ Use this table to answer *"where is X used?"* instantly.
 | **NLP — LLM information extraction** | Topics, descriptions, importance, complexity as structured JSON | `GeminiAiService.analyzeContent()` | A |
 | **Chunking** | ~512-token windows with overlap, cut at paragraph/sentence boundaries | `TextChunkingService.chunkDocument()` | A |
 | **Embedding (ML)** | Text → 768-dim dense vectors (Gemini embedding model), batched 20-at-a-time | `EmbeddingService` | A |
-| **Vector database** | Stores embeddings + cosine-distance search operator `<=>` | PostgreSQL **pgvector**, `document_chunks.embedding` | B |
-| **Semantic retrieval** | `similarity = 1 − (embedding::vector <=> query)` top-20 candidates | `VectorSearchService` | B |
+| **Vector database** | Stores embeddings + cosine-distance search operator `<=>` when installed | PostgreSQL **pgvector**, `document_chunks.embedding` | B |
+| **Semantic retrieval** | `similarity = 1 − (embedding::vector <=> query)` top-20 candidates; identical cosine ranking recomputed in Java when the extension is absent | `VectorSearchService`, `PgVectorSupport` | B |
 | **Reranking (hybrid IR)** | `0.70·vector + 0.20·keywordOverlap + 0.10·titleMatch`, top-20 → top-5 | `RerankingService` | B |
 | **Prompt engineering / grounding** | Anti-hallucination rules + mandatory `[Source N]` citations | `RagAugmentedService.buildRagPrompt()` | B |
 | **RAG generation** | Answer synthesis strictly from retrieved context | `GeminiAiService` via `RagAugmentedService.answerQuestion()` | B |
@@ -499,6 +601,7 @@ Use this table to answer *"where is X used?"* instantly.
 | **Weakness-model training (CRISP-DM)** | scikit-learn experiment producing `weakness_model.joblib`; student-wise split, F1 0.734 / ROC-AUC 0.705 on held-out test | `ml/train_model.py` (offline) | — |
 | **Adaptive priority fusion (algorithm)** | Weighted combination of the four *computed* signals | `AdaptivePriorityService.calculatePriority()` | C→D |
 | **Greedy scheduling** | Fill daily budget highest-priority-first | `PlannerService` | D |
+| **Progress tracking (state)** | Persists which planner tasks the student ticked off, keyed `topicId:activityType:sessionIndex` so a re-ranked plan keeps its ticks | `PlannerTaskCompletionService`, `planner_task_completions` | D |
 | **Legacy fixed-weight ranking** ⚠ | Still ranks `/api/recommendations/**` (Study page "next topics") on complexity/importance/weakness/urgency — *superseded by adaptive priority, migration outstanding* | `RecommendationEngineService.calculateRecommendationScore()` | D |
 
 ### 6.1 The four AI/ML categories in one sentence each
@@ -530,6 +633,7 @@ Concrete walkthrough of *"Explain the OSI model"* asked on the AI Chat page:
 3. EmbeddingService        "Explain the OSI model" -> Gemini embedding API
                            -> [0.021, -0.113, ..., 0.087]   (768 floats)
 4. VectorSearchService     SQL: ORDER BY embedding::vector <=> query LIMIT 20
+                           (or the same cosine in Java when pgvector is absent)
                            -> 20 chunks, each with cosine similarity 0..1
                               e.g. chunk#41 p.14 sim=0.83, chunk#39 p.13 sim=0.81,
                                    chunk#12 p.5  sim=0.44 ...
@@ -689,16 +793,17 @@ above is a real response from the running service, not an illustration.
 > the hybrid reranker, grounding/citation design, BKT mastery estimation, the
 > forgetting-curve scheduler, adaptive priority fusion, greedy plan generation —
 > plus the weakness classifier, which we trained, served and wired in ourselves.
-> All tested: 64 tests across 12 suites, including two opt-in integration suites
-> (live pgvector retrieval, `RAG_INTEGRATION_TEST=true`; live model inference,
+> All tested: 76 tests across 14 suites, including two opt-in integration suites
+> (live retrieval, `RAG_INTEGRATION_TEST=true`; live model inference,
 > `ML_INTEGRATION_TEST=true`) whose 9 cases skip by default.
 
 **"How do you know one student can't see another's data?"**
 > Every controller resolves the caller from the JWT and verifies that the
 > requested topic, quiz, PDF or report belongs to them before touching it
-> (404 otherwise). Vector retrieval SQL itself joins `pdf_documents` on the
-> owner, uploads replace only the caller's rows, and no shared default
-> account exists anymore.
+> (404 otherwise). Retrieval is owner-scoped in both backends — the pgvector
+> SQL joins `pdf_documents` on the owner, the Java fallback reads through
+> `findByUserId`, which is the same restriction expressed as JPQL. Uploads
+> replace only the caller's rows, and no shared default account exists anymore.
 
 ---
 

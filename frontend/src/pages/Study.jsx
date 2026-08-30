@@ -18,6 +18,16 @@ const stripOptionPrefix = (text) =>
 const sameAnswer = (a, b) =>
   typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase()
 
+// Must stay >= WeaknessEngineService.MINIMUM_EVIDENCE_ATTEMPTS. Below it a topic
+// can never leave INSUFFICIENT_DATA, which is what the old breadth-first
+// diagnostic did: 15 questions spread one-per-topic across 15 topics measured
+// nothing at all, and the topics it never showed ranked highest because
+// NOT_ATTEMPTED scores 1.0. Depth beats coverage here — a diagnostic that
+// assesses 7 topics properly is worth more than one that assesses 15 topics not
+// at all.
+const DIAGNOSTIC_ATTEMPTS_PER_TOPIC = 3
+const DIAGNOSTIC_MAX_QUESTIONS = 21
+
 export const Study = ({ mode = 'practice' }) => {
   const { pdfId } = useParams()
   const [searchParams] = useSearchParams()
@@ -41,21 +51,46 @@ export const Study = ({ mode = 'practice' }) => {
   useEffect(() => { fetchTopicsAndQuizzes() }, [pdfId, mode, selectedTopicId])
 
 
-  const buildDiagnosticSet = (quizMap, availableTopics) => {
-    const diagnostic = []
+  // Picks `count` questions spanning as many difficulties as possible, so the
+  // difficulty weighting in the evidence formula (easy 1.0 / medium 1.5 /
+  // hard 2.0) sees a spread rather than three easy questions.
+  const pickSpread = (quizzes, count) => {
+    const byDifficulty = { EASY: [], MEDIUM: [], HARD: [], OTHER: [] }
+    for (const quiz of quizzes) {
+      const bucket = String(quiz.difficulty || '').toUpperCase()
+      ;(byDifficulty[bucket] || byDifficulty.OTHER).push(quiz)
+    }
+
+    const order = ['EASY', 'MEDIUM', 'HARD', 'OTHER']
+    const picked = []
     let round = 0
-    while (diagnostic.length < 15) {
+    while (picked.length < count) {
       let addedThisRound = false
-      for (const topic of availableTopics) {
-        const quiz = quizMap[topic.id]?.[round]
+      for (const difficulty of order) {
+        const quiz = byDifficulty[difficulty][round]
         if (quiz) {
-          diagnostic.push({ ...quiz, topicId: topic.id })
+          picked.push(quiz)
           addedThisRound = true
-          if (diagnostic.length === 15) break
+          if (picked.length === count) break
         }
       }
       if (!addedThisRound) break
       round += 1
+    }
+    return picked
+  }
+
+  const buildDiagnosticSet = (quizMap, availableTopics) => {
+    const maxTopics = Math.max(
+      1,
+      Math.floor(DIAGNOSTIC_MAX_QUESTIONS / DIAGNOSTIC_ATTEMPTS_PER_TOPIC)
+    )
+    const diagnostic = []
+    for (const topic of availableTopics.slice(0, maxTopics)) {
+      const quizzes = quizMap[topic.id] || []
+      for (const quiz of pickSpread(quizzes, DIAGNOSTIC_ATTEMPTS_PER_TOPIC)) {
+        diagnostic.push({ ...quiz, topicId: topic.id })
+      }
     }
     return diagnostic
   }
@@ -93,6 +128,16 @@ export const Study = ({ mode = 'practice' }) => {
       const firstUnansweredIndex = allQuizzesArray.findIndex((quiz) => !attemptedSet.has(quiz.id))
       if (mode === 'diagnostic' && firstUnansweredIndex < 0 && allQuizzesArray.length > 0) {
         toast.success('Diagnostic complete. Your planner is ready.')
+        navigate('/planner', { replace: true })
+        return
+      }
+      // Practice with nothing left: ending the session is the only honest
+      // option. Falling back to index 0 re-served an already-answered question,
+      // and re-answering a memorised item is recorded as a fresh correct
+      // attempt — BKT's guess parameter models guessing, not recall of a
+      // specific item, so mastery inflated every time the bank ran dry.
+      if (mode !== 'diagnostic' && firstUnansweredIndex < 0 && allQuizzesArray.length > 0) {
+        toast.success('You have answered every question available here. Check your planner for what to study next.')
         navigate('/planner', { replace: true })
         return
       }

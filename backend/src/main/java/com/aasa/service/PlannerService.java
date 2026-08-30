@@ -259,7 +259,7 @@ public class PlannerService {
             }
         }
 
-        // Second pass: topics needing revision (mastery 50-70 or medium weakness)
+        // Second pass: topics needing revision (mastery 50-75)
         for (WeakTopicAnalysis analysis : analyses) {
             if (tasks.size() >= 5) break;
             if (usedTopicIds.contains(analysis.getTopicId())) continue;
