@@ -295,13 +295,8 @@ ML_INTEGRATION_TEST=true mvn test -Dtest=MlWeaknessClientIntegrationTest
 
 ---
 
-## License
-
-MIT License — see [`LICENSE`](LICENSE) for details.
-
----
-
 ## Contact
 
 **Author:** Ujwol Shrestha 
+
 **Project Link:** https://github.com/itsujwal11/aiStudyPlanner
