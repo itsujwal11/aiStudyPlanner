@@ -1,4 +1,4 @@
-# AASA — Adaptive AI Study Architect
+# AASA - Adaptive AI Study Architect
 
 > Turn one lecture PDF into an adaptive study programme. Upload PDF + exam date → get topics, MCQ quizzes, grounded Q&A, and a personalised plan that re-ranks itself after every answer.
 
@@ -295,13 +295,8 @@ ML_INTEGRATION_TEST=true mvn test -Dtest=MlWeaknessClientIntegrationTest
 
 ---
 
-## License
-
-MIT License — see [`LICENSE`](LICENSE) for details.
-
----
-
 ## Contact
 
-**Author:** Pasang Gelbu Sherpa  
+**Author:** Ujwol Shrestha 
+
 **Project Link:** https://github.com/itsujwal11/aiStudyPlanner
