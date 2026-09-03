@@ -164,11 +164,6 @@ public class MasteryService {
         return studyProgressRepository.countDueForReview(userId, LocalDate.now());
     }
 
-    public double predictedRetention(double mastery, double daysSinceReview) {
-        double decayRate = 0.5 * (1 - mastery * 0.7);
-        return mastery * Math.exp(-decayRate * daysSinceReview);
-    }
-
     /** Exponential forgetting-curve risk from the BKT model (1 - e^(-lambda*days)). */
     public double forgettingRisk(double mastery, long daysSinceReview) {
         return knowledgeTracingService.forgettingRisk(mastery, daysSinceReview);

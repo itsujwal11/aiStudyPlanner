@@ -1,4 +1,24 @@
--- Seed admin user
--- Password: admin123 (BCrypt encoded, cost 10)
-INSERT INTO users (id, email, name, password, role, created_at, updated_at)
-VALUES (nextval('user_id_seq'), 'admin@aasa.com', 'Admin', '$2a$10$ZhLoXudsw8o58IS.A2Y/8.BzJlKvZV66x.ks56mpOBKccd4tYZvce', 'ADMIN', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+-- Manual, development-only administrator provisioning.
+--
+-- This script is NOT executed automatically. Spring does not run it
+-- (spring.sql.init is unset and the schema is built from the JPA entities by
+-- ddl-auto=update), and docker-compose mounts docs/schema.sql - not this file -
+-- into the database's init directory. Run it by hand only when you need an
+-- administrator account.
+--
+-- It deliberately does NOT insert a hardcoded credential. An earlier version of
+-- this file shipped a known BCrypt hash for a well-known address, which meant
+-- every checkout of the repository shared the same admin password. Instead,
+-- register the account normally through the application's sign-up flow so the
+-- password is chosen by the operator and hashed by the application, then run
+-- this statement once to promote it.
+--
+-- Usage:
+--   1. Register a normal account through the UI (or POST /api/auth/register).
+--   2. Replace the address below with that account's email.
+--   3. psql -U aasa_user -d aasa_db -f seed_admin.sql
+
+UPDATE users
+SET role = 'ADMIN',
+    updated_at = CURRENT_TIMESTAMP
+WHERE email = 'replace-with-your-registered-email@example.com';

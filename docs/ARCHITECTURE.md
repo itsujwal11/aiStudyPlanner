@@ -666,22 +666,25 @@ weights and are bounded by an explicit cap (`90` min) instead of normalisation.
 
 ### Unused algorithmic code
 
-- `MasteryService.predictedRetention(mastery, days)` implements a **second,
-  different** decay model — `mastery · e^(−0.5(1 − 0.7·mastery)·days)` — that no
-  caller uses. The live forgetting model is `forgettingRisk` (§2). Keeping both
-  invites citing the wrong one; it should be deleted.
-- `WeaknessEngineService.calculateWeaknessLevel(Double)` is public and uncalled,
-  and it bands on an **inverted 0–100 scale** (`>= 75 → LOW`, `>= 50 → MEDIUM`,
-  else `HIGH`) — a score-as-percentage-correct reading. The live banding is
-  `levelForScore` (§6), where a *high* number means *high weakness*
-  (`>= 0.65 → HIGH`). The two read opposite ways round, so this is the dead
-  method most likely to be quoted by mistake; it should be deleted.
-- `ScoringEngineService.calculateImportanceScore(Topic)` returns a constant
-  `0.46` from hardcoded placeholders and has no callers.
-- `ScoringEngineService.calculatePriorityScore(...)` is the deprecated
-  fixed-weight formula, also uncalled.
-- `frontend/src/components/Navigation.jsx` is imported by nothing (`Sidebar.jsx`
-  is the live navigation) and still advertises a `/recommendations` entry.
+There is none: the dead code this section used to list has been deleted, so
+every algorithm still in the tree is one the running system calls. Removed, and
+why each mattered:
+
+- `MasteryService.predictedRetention(...)` was a **second, different** decay model
+  (`mastery · e^(−0.5(1 − 0.7·mastery)·days)`) with no callers. The live
+  forgetting model is `forgettingRisk` (§2); keeping both invited citing the wrong one.
+- `WeaknessEngineService.calculateWeaknessLevel(Double)` banded on an **inverted
+  0–100 scale** (`>= 75 → LOW`), the opposite reading to the live `levelForScore`
+  (§6, `>= 0.65 → HIGH`, where a high number means high *weakness*). Two methods
+  that read opposite ways round is the most dangerous kind of dead code.
+- `ScoringEngineService.calculateImportanceScore(Topic)` returned a constant `0.46`
+  from hardcoded placeholders.
+- `ScoringEngineService.calculatePriorityScore(...)` duplicated the legacy
+  fixed-weight formula. The live copy of that formula is
+  `RecommendationEngineService` (§6), which the Study page still calls.
+- `OllamaAiService` was an unreferenced alternative LLM client.
+- `frontend/src/components/Navigation.jsx` was imported by nothing (`Sidebar.jsx`
+  is the live navigation) and still advertised a `/recommendations` entry.
 
 ## Why this is a real algorithmic contribution
 

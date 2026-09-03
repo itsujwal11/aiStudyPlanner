@@ -24,20 +24,6 @@ public class WeaknessEngineService {
     public static final double HYBRID_EVIDENCE_WEIGHT = 0.70;
     public static final double HYBRID_MODEL_WEIGHT = 0.30;
 
-    public StudyProgress.WeaknessLevel calculateWeaknessLevel(Double score) {
-        if (score == null) {
-            return StudyProgress.WeaknessLevel.NOT_ATTEMPTED;
-        }
-
-        if (score >= 75) {
-            return StudyProgress.WeaknessLevel.LOW;
-        } else if (score >= 50) {
-            return StudyProgress.WeaknessLevel.MEDIUM;
-        } else {
-            return StudyProgress.WeaknessLevel.HIGH;
-        }
-    }
-
     public Double getWeaknessScore(StudyProgress.WeaknessLevel level) {
         return switch (level) {
             case LOW -> 0.2;
