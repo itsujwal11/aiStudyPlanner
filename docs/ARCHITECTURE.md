@@ -83,11 +83,10 @@ The whole product in one pass, with the route each step lives on:
    from stored topics, so they cost no API call and cannot fail on a quota or a
    timeout. Free-form RAG lives at `/ai-chat`: questions answered *only* from the
    uploaded document, with a Sources panel naming the file, page and relevance of
-   each passage used. That route and `/api/rag/ask` are fully implemented and
-   tested, but deliberately **left off the sidebar** — every answer needs a live
-   Gemini generation call, the least reliable surface in the app, and
-   `/quick-answers` covers the same ground from the database. Reachable by URL;
-   restore the nav entry in `Sidebar.jsx` to put it back.
+   each passage used. Both surfaces ship in the sidebar: `/quick-answers` is the
+   cheap, always-available path, and `/ai-chat` is the one that needs a live
+   Gemini generation call — the least reliable surface in the app, which is why
+   the cheaper path exists beside it rather than instead of it.
 9. **Track progress** (`/dashboard`, `/analytics`) and **export** a study report
    as JSON or CSV (`/reports`).
 
@@ -907,15 +906,18 @@ Deliberately out of scope — these are decisions, not gaps:
   but `/api/recommendations/**` (called by the Study page) still ranks with the
   deprecated fixed-weight formula in `RecommendationEngineService`. Migrating it
   onto `AdaptivePriorityService` is outstanding work, not a design choice.
-- `ScoringEngineService.calculateImportanceScore(Topic)` and
-  `calculatePriorityScore(...)` have no callers; the live importance figure comes
-  from Gemini, falling back to `TopicAnalysisService.calculateImportanceScore(signals)`.
-  `OllamaAiService` is likewise unreferenced. All are dead code pending removal.
-- `backend/src/main/resources/init.sql` and `seed_admin.sql` still contain the
-  retired `admin@aasa.com` / `admin123` seed. Spring Boot does not auto-run files
-  under those names and docker-compose mounts only `docs/schema.sql`, so they are
-  inert — but they contradict the *No default accounts* policy above and should
-  be deleted.
+- No dead algorithmic code remains: `ScoringEngineService.calculateImportanceScore`,
+  `calculatePriorityScore`, `MasteryService.predictedRetention`,
+  `WeaknessEngineService.calculateWeaknessLevel(Double)`, `OllamaAiService` and
+  `Navigation.jsx` have all been deleted. The live importance figure comes from
+  Gemini, falling back to `TopicAnalysisService.calculateImportanceScore(signals)`.
+- No credential ships in the repository. The `admin@aasa.com` / `admin123` seed is
+  gone from `init.sql`, and `seed_admin.sql` is now a manual, clearly-marked
+  provisioning script that *promotes an already-registered account* to `ADMIN`
+  rather than inserting a hardcoded password hash. Neither file is auto-executed:
+  Spring does not run files under those names (`spring.sql.init` is unset, the
+  schema comes from `ddl-auto=update`) and docker-compose mounts only
+  `docs/schema.sql`.
 - **Retrieval quality is tested by property, not benchmarked.** The integration
   suite proves ranking is semantic, that different queries reorder results, and
   that scoping never leaks across users — but there is no labelled

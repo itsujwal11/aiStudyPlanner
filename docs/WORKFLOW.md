@@ -14,7 +14,7 @@ AI/ML, algorithms, chunking, embedding, retrieval, reranking are used.
 ```mermaid
 flowchart LR
     subgraph Client["Frontend - React 18 + Vite"]
-        UI[Pages - Dashboard, Upload, Study, Quick Answers,<br/>Practice, Planner, Reports, Analytics<br/>+ AI Chat, off-nav at /ai-chat]
+        UI[Pages - Dashboard, Upload, Study, AI Chat, Quick Answers,<br/>Practice, Analytics, Planner, Profile<br/>+ Reports, off-nav at /reports]
     end
 
     subgraph Backend["Backend - Spring Boot Java 17, port 9096"]
@@ -183,11 +183,11 @@ Key implementation facts (all real code):
 
 This is the core **Retrieval-Augmented Generation** pipeline:
 
-> **Where the page lives.** `/ai-chat` is fully implemented and tested but is
-> deliberately **off the sidebar** — every answer needs a live Gemini generation
-> call, the least reliable surface in the app, and `/quick-answers` covers the
-> same ground from stored topics with no API call. The route is reachable by URL;
-> restoring the nav entry is one line in `Sidebar.jsx`.
+> **Where the page lives.** `/ai-chat` is in the sidebar, next to
+> `/quick-answers`. They are not duplicates: this page answers an arbitrary
+> question and costs a live Gemini generation call, while Quick Answers assembles
+> pre-built overviews from stored topics and cannot fail on a quota or a timeout.
+> The cheap path exists beside the expensive one, not instead of it.
 
 ```mermaid
 sequenceDiagram
