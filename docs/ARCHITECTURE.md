@@ -166,7 +166,7 @@ scalable.
 ```
 backend/src/main/java/com/aasa/
     controller/   REST endpoints (13 controllers)
-    service/      business logic (36 services)
+    service/      business logic (35 services)
     repository/   Spring Data JPA interfaces (10)
     entity/       JPA entities (10 tables)
     dto/          request/response payloads (37)

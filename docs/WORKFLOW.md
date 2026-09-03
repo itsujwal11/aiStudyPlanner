@@ -19,7 +19,7 @@ flowchart LR
 
     subgraph Backend["Backend - Spring Boot Java 17, port 9096"]
         API[REST Controllers - JWT secured]
-        SVC[Service Layer - 36 services]
+        SVC[Service Layer - 35 services]
     end
 
     subgraph Data["Data Layer"]
