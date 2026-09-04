@@ -118,7 +118,7 @@ public class DashboardService {
             return emptyDashboard();
         }
 
-        PdfDocument pdf = pdfDocumentRepository.findById(pdfId).orElse(null);
+        PdfDocument pdf = pdfDocumentRepository.findByIdAndUserId(pdfId, user.getId()).orElse(null);
         if (pdf == null) {
             return emptyDashboard();
         }

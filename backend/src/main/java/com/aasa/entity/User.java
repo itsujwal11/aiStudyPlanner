@@ -27,7 +27,15 @@ public class User {
     private String password;
 
     @Column(length = 20)
+    @Builder.Default
     private String role = "USER";
+
+    @Column(name = "email_verified", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private Boolean emailVerified = false;
+
+    @Column(name = "google_subject", unique = true, length = 255)
+    private String googleSubject;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

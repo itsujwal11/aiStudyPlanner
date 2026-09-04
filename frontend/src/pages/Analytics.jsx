@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { analyticsAPI } from '../api'
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { TrendingUp, Target, Zap, Clock, AlertCircle, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -42,8 +42,6 @@ export const Analytics = () => {
       </div>
     )
   }
-
-  const COLORS = ['#06b6d4', '#0ea5e9', '#3b82f6', '#8b5cf6', '#ec4899']
 
   return (
     <div className="space-y-6">

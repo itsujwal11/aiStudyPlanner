@@ -52,3 +52,19 @@ uploads/
 backend/backend.log*
 backend.log*
 *.gz
+
+# Machine-learning local artifacts
+ml/.venv/
+__pycache__/
+*.pyc
+ml/data/
+ml/models/*.joblib
+ml.zip
+
+# AI coding tool configs (keep out of repo)
+.agents/
+.claude/
+.codex/
+.sixth/
+.cursor/
+.aider*

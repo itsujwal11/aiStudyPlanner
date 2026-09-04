@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { pdfAPI, topicAPI, quizAPI, dashboardAPI, recommendationAPI } from '../api'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { topicAPI, quizAPI, dashboardAPI, recommendationAPI } from '../api'
 import { StudyTimer } from '../components/StudyTimer'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
@@ -10,8 +10,28 @@ import { BookOpen, AlertCircle, CheckCircle, XCircle, ArrowRight, BarChart3, Arr
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
 const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
 
-export const Study = () => {
+// Some AI-generated options already come back with their own "A) "/"(A)" label baked in.
+// Strip it for display only — the underlying option text is still what gets submitted/compared.
+const stripOptionPrefix = (text) =>
+  typeof text === 'string' ? text.replace(/^(?:[A-Da-d][.):]|\([A-Da-d]\))\s+/, '').trim() : text
+
+const sameAnswer = (a, b) =>
+  typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase()
+
+// Must stay >= WeaknessEngineService.MINIMUM_EVIDENCE_ATTEMPTS. Below it a topic
+// can never leave INSUFFICIENT_DATA, which is what the old breadth-first
+// diagnostic did: 15 questions spread one-per-topic across 15 topics measured
+// nothing at all, and the topics it never showed ranked highest because
+// NOT_ATTEMPTED scores 1.0. Depth beats coverage here — a diagnostic that
+// assesses 7 topics properly is worth more than one that assesses 15 topics not
+// at all.
+const DIAGNOSTIC_ATTEMPTS_PER_TOPIC = 3
+const DIAGNOSTIC_MAX_QUESTIONS = 21
+
+export const Study = ({ mode = 'practice' }) => {
   const { pdfId } = useParams()
+  const [searchParams] = useSearchParams()
+  const selectedTopicId = searchParams.get('topicId')
   const [topics, setTopics] = useState([])
   const [allQuizzes, setAllQuizzes] = useState([])
   const [currentGlobalQuizIndex, setCurrentGlobalQuizIndex] = useState(0)
@@ -21,27 +41,110 @@ export const Study = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [startTime, setStartTime] = useState(null)
+  const [resumedCount, setResumedCount] = useState(0)
+  const [answeredQuizIds, setAnsweredQuizIds] = useState(new Set())
   const [quizStats, setQuizStats] = useState({ correct: 0, total: 0 })
   const [sessionComplete, setSessionComplete] = useState(false)
   const [topicQuizMap, setTopicQuizMap] = useState({})
   const navigate = useNavigate()
 
-  useEffect(() => { fetchTopicsAndQuizzes() }, [pdfId])
+  useEffect(() => { fetchTopicsAndQuizzes() }, [pdfId, mode, selectedTopicId])
 
+
+  // Picks `count` questions spanning as many difficulties as possible, so the
+  // difficulty weighting in the evidence formula (easy 1.0 / medium 1.5 /
+  // hard 2.0) sees a spread rather than three easy questions.
+  const pickSpread = (quizzes, count) => {
+    const byDifficulty = { EASY: [], MEDIUM: [], HARD: [], OTHER: [] }
+    for (const quiz of quizzes) {
+      const bucket = String(quiz.difficulty || '').toUpperCase()
+      ;(byDifficulty[bucket] || byDifficulty.OTHER).push(quiz)
+    }
+
+    const order = ['EASY', 'MEDIUM', 'HARD', 'OTHER']
+    const picked = []
+    let round = 0
+    while (picked.length < count) {
+      let addedThisRound = false
+      for (const difficulty of order) {
+        const quiz = byDifficulty[difficulty][round]
+        if (quiz) {
+          picked.push(quiz)
+          addedThisRound = true
+          if (picked.length === count) break
+        }
+      }
+      if (!addedThisRound) break
+      round += 1
+    }
+    return picked
+  }
+
+  const buildDiagnosticSet = (quizMap, availableTopics) => {
+    const maxTopics = Math.max(
+      1,
+      Math.floor(DIAGNOSTIC_MAX_QUESTIONS / DIAGNOSTIC_ATTEMPTS_PER_TOPIC)
+    )
+    const diagnostic = []
+    for (const topic of availableTopics.slice(0, maxTopics)) {
+      const quizzes = quizMap[topic.id] || []
+      for (const quiz of pickSpread(quizzes, DIAGNOSTIC_ATTEMPTS_PER_TOPIC)) {
+        diagnostic.push({ ...quiz, topicId: topic.id })
+      }
+    }
+    return diagnostic
+  }
   const fetchTopicsAndQuizzes = async () => {
     try {
       const topicsResponse = pdfId ? await topicAPI.getByPdf(pdfId) : await topicAPI.getRanked()
-      setTopics(topicsResponse.data)
+      const visibleTopics = selectedTopicId
+        ? topicsResponse.data.filter((topic) => String(topic.id) === selectedTopicId)
+        : topicsResponse.data
+      setTopics(visibleTopics)
       const quizMap = {}
       let allQuizzesArray = []
-      for (const topic of topicsResponse.data) {
+      for (const topic of visibleTopics) {
         const quizzesResponse = await quizAPI.getByTopic(topic.id)
         quizMap[topic.id] = quizzesResponse.data
         allQuizzesArray = [...allQuizzesArray, ...quizzesResponse.data.map(q => ({ ...q, topicId: topic.id }))]
       }
+      if (mode === 'diagnostic') {
+        allQuizzesArray = buildDiagnosticSet(quizMap, visibleTopics)
+      }
       setTopicQuizMap(quizMap)
       setAllQuizzes(allQuizzesArray)
       setStartTime(Date.now())
+
+      let attemptedQuizIds = []
+      try {
+        const progressResponse = await quizAPI.getProgress(pdfId)
+        attemptedQuizIds = progressResponse.data?.attemptedQuizIds || []
+      } catch (progressError) {
+        console.warn('Could not restore quiz progress:', progressError)
+      }
+
+      const attemptedSet = new Set(attemptedQuizIds)
+      const completedCount = allQuizzesArray.filter((quiz) => attemptedSet.has(quiz.id)).length
+      const firstUnansweredIndex = allQuizzesArray.findIndex((quiz) => !attemptedSet.has(quiz.id))
+      if (mode === 'diagnostic' && firstUnansweredIndex < 0 && allQuizzesArray.length > 0) {
+        toast.success('Diagnostic complete. Your planner is ready.')
+        navigate('/planner', { replace: true })
+        return
+      }
+      // Practice with nothing left: ending the session is the only honest
+      // option. Falling back to index 0 re-served an already-answered question,
+      // and re-answering a memorised item is recorded as a fresh correct
+      // attempt — BKT's guess parameter models guessing, not recall of a
+      // specific item, so mastery inflated every time the bank ran dry.
+      if (mode !== 'diagnostic' && firstUnansweredIndex < 0 && allQuizzesArray.length > 0) {
+        toast.success('You have answered every question available here. Check your planner for what to study next.')
+        navigate('/planner', { replace: true })
+        return
+      }
+      setCurrentGlobalQuizIndex(firstUnansweredIndex >= 0 ? firstUnansweredIndex : 0)
+      setResumedCount(completedCount)
+      setAnsweredQuizIds(attemptedSet)
+
       setError('')
     } catch (err) {
       console.error('Error loading topics and quizzes:', err)
@@ -54,6 +157,7 @@ export const Study = () => {
     const timeTaken = Math.floor((Date.now() - startTime) / 1000)
     try {
       const response = await quizAPI.submit(currentQuiz.id, { selectedAnswer, timeTakenSeconds: timeTaken })
+      setAnsweredQuizIds((previous) => new Set([...previous, currentQuiz.id]))
       setResult(response.data)
       setSubmitted(true)
       setQuizStats(prev => ({ correct: prev.correct + (response.data.isCorrect ? 1 : 0), total: prev.total + 1 }))
@@ -64,8 +168,11 @@ export const Study = () => {
   }
 
   const handleNextQuiz = () => {
-    if (currentGlobalQuizIndex < allQuizzes.length - 1) {
-      setCurrentGlobalQuizIndex(currentGlobalQuizIndex + 1)
+    const nextUnansweredIndex = allQuizzes.findIndex(
+      (quiz, index) => index > currentGlobalQuizIndex && !answeredQuizIds.has(quiz.id)
+    )
+    if (nextUnansweredIndex >= 0) {
+      setCurrentGlobalQuizIndex(nextUnansweredIndex)
       setSelectedAnswer('')
       setSubmitted(false)
       setResult(null)
@@ -73,13 +180,6 @@ export const Study = () => {
     } else {
       handleSessionComplete()
     }
-  }
-
-  const calculateWeakness = (accuracy, attempts) => {
-    let multiplier = 1.0
-    if (attempts <= 3) multiplier = 1.8
-    else if (attempts <= 8) multiplier = 1.2
-    return (1 - accuracy) * multiplier
   }
 
   const fireConfetti = () => {
@@ -94,13 +194,13 @@ export const Study = () => {
   }
 
   const handleSessionComplete = async () => {
-    const accuracy = quizStats.total > 0 ? quizStats.correct / quizStats.total : 0
-    const weakness = calculateWeakness(accuracy, quizStats.total)
     try {
-      for (const topic of topics) {
-        await topicAPI.updateWeakness(topic.id, { weakness, accuracy, attempts: quizStats.total })
+      try {
+        await dashboardAPI.get()
+        await recommendationAPI.getNextTopics(10)
+      } catch (refreshError) {
+        console.warn('Session saved, but dashboard refresh failed:', refreshError)
       }
-      try { await dashboardAPI.get(); await recommendationAPI.getNextTopics(10) } catch (_) {}
       fireConfetti()
       toast.success('Session complete! Great work!')
       setSessionComplete(true)
@@ -137,7 +237,9 @@ export const Study = () => {
   const currentQuiz = allQuizzes[currentGlobalQuizIndex]
   const currentTopic = topics.find(t => t.id === currentQuiz.topicId)
   const progress = ((currentGlobalQuizIndex + 1) / allQuizzes.length) * 100
-  const isLastQuiz = currentGlobalQuizIndex === allQuizzes.length - 1
+  const isLastQuiz = !allQuizzes.some(
+    (quiz, index) => index > currentGlobalQuizIndex && !answeredQuizIds.has(quiz.id)
+  )
   const accuracy = quizStats.total > 0 ? Math.round((quizStats.correct / quizStats.total) * 100) : 0
 
   if (sessionComplete) {
@@ -187,12 +289,18 @@ export const Study = () => {
 
       {/* Header */}
       <motion.div variants={item} className="glass-pane rounded-xl p-6 border border-black/8">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="text-xl font-bold text-on-surface">Study Session</h1>
-            <p className="text-sm text-on-surface-variant/70">Complete all quizzes to update your learning priorities</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-on-surface">{mode === 'diagnostic' ? 'Diagnostic Quiz' : 'Practice Session'}</h1>
+            <p className="text-sm text-on-surface-variant/70">
+              {resumedCount > 0
+                ? `${resumedCount} answered question${resumedCount === 1 ? '' : 's'} restored. Continue from where you stopped.`
+                : mode === 'diagnostic'
+                  ? 'A short, balanced quiz that creates your first evidence-based study plan.'
+                  : 'Practise weak topics and keep your mastery estimate current.'}
+            </p>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right flex-shrink-0">
             <p className="text-sm text-on-surface-variant/70">Question {currentGlobalQuizIndex + 1} of {allQuizzes.length}</p>
             <p className="text-primary font-semibold">{accuracy}% Accuracy</p>
           </div>
@@ -220,12 +328,14 @@ export const Study = () => {
               <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                 {topics.map((topic) => {
                   const topicQuizzes = topicQuizMap[topic.id] || []
-                  const topicQuizzesAnswered = allQuizzes.filter(q => q.topicId === topic.id && currentGlobalQuizIndex >= allQuizzes.indexOf(q)).length
+                  const topicQuizzesAnswered = allQuizzes.filter(
+                    q => q.topicId === topic.id && answeredQuizIds.has(q.id)
+                  ).length
                   return (
                     <div key={topic.id} className="bg-white/40 backdrop-blur-sm border border-black/8 rounded-xl p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-semibold text-on-surface text-sm flex-1">{topic.title}</h3>
-                        <span className="text-xs px-2 py-1 rounded-lg bg-primary/10 text-primary font-semibold flex-shrink-0 ml-2">{topicQuizzes.length}Q</span>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="font-semibold text-on-surface text-sm flex-1 min-w-0 break-words">{topic.title}</h3>
+                        <span className="text-xs px-2 py-1 rounded-lg bg-primary/10 text-primary font-semibold flex-shrink-0">{topicQuizzes.length}Q</span>
                       </div>
                       <div className="space-y-1.5 text-xs">
                         <div className="flex justify-between">
@@ -298,21 +408,21 @@ export const Study = () => {
               transition={{ duration: 0.25 }}
             >
               <div className="glass-pane rounded-xl p-8 border border-black/8">
-                <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/20">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-6 border-b border-white/20">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <BookOpen className="w-5 h-5 text-primary" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-on-surface-variant/70 text-sm">Topic</p>
-                      <p className="text-on-surface font-semibold">{currentTopic?.title || 'Loading...'}</p>
+                      <p className="text-on-surface font-semibold break-words">{currentTopic?.title || 'Loading...'}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="sm:text-right flex-shrink-0">
                     <p className="text-on-surface-variant/70 text-sm">Difficulty</p>
                     <p className={`font-semibold text-sm ${
-                      currentQuiz.difficulty === 'hard' ? 'text-error' :
-                      currentQuiz.difficulty === 'medium' ? 'text-yellow-600' : 'text-emerald-600'
+                      currentQuiz.difficulty?.toUpperCase() === 'HARD' ? 'text-error' :
+                      currentQuiz.difficulty?.toUpperCase() === 'MEDIUM' ? 'text-yellow-600' : 'text-emerald-600'
                     }`}>
                       {currentQuiz.difficulty?.charAt(0).toUpperCase() + currentQuiz.difficulty?.slice(1)}
                     </p>
@@ -329,7 +439,7 @@ export const Study = () => {
                       { label: 'D', value: currentQuiz.optionD },
                     ].map((option) => {
                       const isSelected = selectedAnswer === option.value
-                      const isCorrect = result?.correctAnswer === option.value
+                      const isCorrect = sameAnswer(result?.correctAnswer, option.value)
                       const isUserWrong = submitted && selectedAnswer === option.value && !result?.isCorrect
                       return (
                         <label
@@ -348,8 +458,8 @@ export const Study = () => {
                           }`}>
                             {isSelected && <div className="w-2.5 h-2.5 bg-primary rounded-full" />}
                           </div>
-                          <div className="ml-3 flex-1">
-                            <p className="font-semibold text-on-surface">{option.label}. {option.value}</p>
+                          <div className="ml-3 flex-1 min-w-0">
+                            <p className="font-semibold text-on-surface break-words">{option.label}. {stripOptionPrefix(option.value)}</p>
                           </div>
                           {submitted && isCorrect && <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />}
                           {submitted && isUserWrong && <XCircle className="w-5 h-5 text-error flex-shrink-0" />}

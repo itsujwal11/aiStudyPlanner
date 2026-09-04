@@ -38,7 +38,10 @@ public class PlannerService {
     private WeaknessEngineService weaknessEngineService;
 
     @Autowired
-    private ScoringEngineService scoringEngineService;
+    private AdaptivePriorityService adaptivePriorityService;
+
+    @Autowired
+    private PlannerTaskCompletionService taskCompletionService;
 
     public PlannerDto generatePlanner(User user) {
         logger.info("Generating planner for user ID: " + user.getId());
@@ -76,11 +79,17 @@ public class PlannerService {
                 .filter(t -> t.getMasteryLevel() < 70.0 || t.getWeaknessScore() > 0.5)
                 .collect(Collectors.toList());
 
-        // 4. Generate today's todo tasks (max 5, focused)
+        // 4. Generate today's todo tasks (max 5, focused) and restore the ticks
+        //    the student has already saved for today.
         List<TodoTask> todayTasks = generateTodayTasks(allAnalyses, progressMap, user);
+        Map<String, Boolean> completed =
+                taskCompletionService.getCompletionsForDate(user, LocalDate.now());
+        todayTasks.forEach(task ->
+                task.setCompleted(Boolean.TRUE.equals(completed.get(task.getTaskKey()))));
 
-        // 5. Generate study roadmap (next 7-14 days)
-        List<StudyRoadmapItem> roadmap = generateStudyRoadmap(allAnalyses, daysUntilExam);
+        // 5. Generate study roadmap. Day 1 is today's task list verbatim, so the
+        //    two views can never disagree about what the student should do today.
+        List<StudyRoadmapItem> roadmap = generateStudyRoadmap(allAnalyses, daysUntilExam, todayTasks);
 
         // 6. Generate revision schedule
         List<RevisionScheduleItem> revisionSchedule = generateRevisionSchedule(allAnalyses, progressMap);
@@ -127,11 +136,10 @@ public class PlannerService {
         if (progress != null) {
             totalAttempts = progress.getTotalAttempts() != null ? progress.getTotalAttempts() : 0;
             correctAttempts = progress.getCorrectAttempts() != null ? progress.getCorrectAttempts() : 0;
-            double score = progress.getBestScore() != null ? progress.getBestScore() : 0.0;
-            masteryLevel = score;
-
-            StudyProgress.WeaknessLevel level = weaknessEngineService.calculateWeaknessLevel(score);
-            weaknessScore = weaknessEngineService.getWeaknessScore(level);
+            masteryLevel = (progress.getMasteryLevel() != null ? progress.getMasteryLevel() : 0.0) * 100.0;
+            weaknessScore = topic.getWeaknessScore() != null
+                    ? topic.getWeaknessScore()
+                    : weaknessEngineService.getWeaknessScore(progress.getWeaknessLevel());
         } else {
             weaknessScore = 1.0; // NOT_ATTEMPTED
             masteryLevel = 0.0;
@@ -139,10 +147,14 @@ public class PlannerService {
 
         double importance = topic.getImportanceScore() != null ? topic.getImportanceScore() : 0.5;
         double complexity = topic.getComplexityScore() != null ? topic.getComplexityScore() : 0.5;
-        double difficulty = complexity;
 
-        // Priority = (Weakness × Importance × Difficulty) / (Mastery + 0.1)
-        double priorityScore = (weaknessScore * importance * difficulty) / ((masteryLevel / 100.0) + 0.1);
+        // Adaptive priority from real learner evidence: BKT mastery gap + forgetting risk
+        // since the last revision + exam urgency + AI-assessed topic importance.
+        LocalDate examDate = topic.getPdfDocument() != null ? topic.getPdfDocument().getExamDate() : null;
+        LocalDate lastStudyDate = progress != null ? progress.getLastStudyDate() : null;
+        double masteryProbability = masteryLevel / 100.0;
+        double priorityScore = adaptivePriorityService.calculatePriority(
+                masteryProbability, importance, examDate, lastStudyDate);
 
         String whyImportant = describeImportance(importance, complexity, weaknessScore);
         String recommendedDuration = estimateDuration(complexity, weaknessScore);
@@ -197,6 +209,33 @@ public class PlannerService {
         return total + " mins";
     }
 
+    /**
+     * Stable identity for a planner task: the topic plus what the student is
+     * being asked to do with it. Persisted ticks are keyed on this, so the
+     * identity must not depend on the task's position in the list — the plan is
+     * re-ranked after every quiz answer.
+     */
+    public static String taskKeyFor(Long topicId, String activityType, int sessionIndex) {
+        return topicId + ":" + activityType + ":" + sessionIndex;
+    }
+
+    /** Builds one task, giving every pass the same key/duration treatment. */
+    private TodoTask todo(WeakTopicAnalysis analysis, String activityType,
+                          int durationMinutes, String priorityLevel) {
+        return TodoTask.builder()
+                .topicTitle(analysis.getTopicTitle())
+                .activityType(activityType)
+                .estimatedDurationMinutes(durationMinutes)
+                .complexityLevel(complexityLabel(analysis.getComplexityScore()))
+                .priorityLevel(priorityLevel)
+                .completed(false)
+                .topicId(analysis.getTopicId())
+                .weaknessScore(analysis.getWeaknessScore())
+                .taskKey(taskKeyFor(analysis.getTopicId(), activityType, 0))
+                .sessionIndex(0)
+                .build();
+    }
+
     private List<TodoTask> generateTodayTasks(List<WeakTopicAnalysis> analyses,
                                                Map<Long, StudyProgress> progressMap,
                                                User user) {
@@ -209,54 +248,24 @@ public class PlannerService {
             if (usedTopicIds.contains(analysis.getTopicId())) continue;
 
             if (analysis.getMasteryLevel() < 50.0 && analysis.getWeaknessScore() > 0.5) {
-                // Hard topics split into smaller sessions
-                boolean isHard = analysis.getComplexityScore() >= 0.7;
-                int duration = isHard ? 45 : 60;
-
-                tasks.add(TodoTask.builder()
-                        .topicTitle(analysis.getTopicTitle())
-                        .activityType("LEARN")
-                        .estimatedDurationMinutes(duration)
-                        .complexityLevel(complexityLabel(analysis.getComplexityScore()))
-                        .priorityLevel("HIGH")
-                        .completed(false)
-                        .topicId(analysis.getTopicId())
-                        .weaknessScore(analysis.getWeaknessScore())
-                        .build());
+                // One block per topic. A hard topic previously produced two
+                // identical 45-minute LEARN rows ("split into smaller sessions"),
+                // which the UI could only render as the same task listed twice.
+                // The session length now scales with complexity and weakness via
+                // the same estimator the roadmap uses, so one row carries the
+                // extra time instead of duplicating the row.
+                tasks.add(todo(analysis, "LEARN", estimateDurationMinutes(analysis), "HIGH"));
                 usedTopicIds.add(analysis.getTopicId());
-
-                // If hard, add second session
-                if (isHard && tasks.size() < 5) {
-                    tasks.add(TodoTask.builder()
-                            .topicTitle(analysis.getTopicTitle())
-                            .activityType("LEARN")
-                            .estimatedDurationMinutes(45)
-                            .complexityLevel(complexityLabel(analysis.getComplexityScore()))
-                            .priorityLevel("HIGH")
-                            .completed(false)
-                            .topicId(analysis.getTopicId())
-                            .weaknessScore(analysis.getWeaknessScore())
-                            .build());
-                }
             }
         }
 
-        // Second pass: topics needing revision (mastery 50-70 or medium weakness)
+        // Second pass: topics needing revision (mastery 50-75)
         for (WeakTopicAnalysis analysis : analyses) {
             if (tasks.size() >= 5) break;
             if (usedTopicIds.contains(analysis.getTopicId())) continue;
 
             if (analysis.getMasteryLevel() >= 50.0 && analysis.getMasteryLevel() < 75.0) {
-                tasks.add(TodoTask.builder()
-                        .topicTitle(analysis.getTopicTitle())
-                        .activityType("REVISION")
-                        .estimatedDurationMinutes(30)
-                        .complexityLevel(complexityLabel(analysis.getComplexityScore()))
-                        .priorityLevel("MEDIUM")
-                        .completed(false)
-                        .topicId(analysis.getTopicId())
-                        .weaknessScore(analysis.getWeaknessScore())
-                        .build());
+                tasks.add(todo(analysis, "REVISION", 30, "MEDIUM"));
                 usedTopicIds.add(analysis.getTopicId());
             }
         }
@@ -267,16 +276,7 @@ public class PlannerService {
             if (usedTopicIds.contains(analysis.getTopicId())) continue;
 
             if (analysis.getImportanceScore() >= 0.8 && analysis.getMasteryLevel() < 90.0) {
-                tasks.add(TodoTask.builder()
-                        .topicTitle(analysis.getTopicTitle())
-                        .activityType("PRACTICE")
-                        .estimatedDurationMinutes(25)
-                        .complexityLevel(complexityLabel(analysis.getComplexityScore()))
-                        .priorityLevel("HIGH")
-                        .completed(false)
-                        .topicId(analysis.getTopicId())
-                        .weaknessScore(analysis.getWeaknessScore())
-                        .build());
+                tasks.add(todo(analysis, "PRACTICE", 25, "HIGH"));
                 usedTopicIds.add(analysis.getTopicId());
             }
         }
@@ -287,16 +287,7 @@ public class PlannerService {
             if (usedTopicIds.contains(analysis.getTopicId())) continue;
 
             if (analysis.getMasteryLevel() >= 90.0) {
-                tasks.add(TodoTask.builder()
-                        .topicTitle(analysis.getTopicTitle())
-                        .activityType("REVISION")
-                        .estimatedDurationMinutes(15)
-                        .complexityLevel(complexityLabel(analysis.getComplexityScore()))
-                        .priorityLevel("LOW")
-                        .completed(false)
-                        .topicId(analysis.getTopicId())
-                        .weaknessScore(analysis.getWeaknessScore())
-                        .build());
+                tasks.add(todo(analysis, "REVISION", 15, "LOW"));
                 usedTopicIds.add(analysis.getTopicId());
             }
         }
@@ -304,7 +295,9 @@ public class PlannerService {
         return tasks;
     }
 
-    private List<StudyRoadmapItem> generateStudyRoadmap(List<WeakTopicAnalysis> analyses, int daysUntilExam) {
+    private List<StudyRoadmapItem> generateStudyRoadmap(List<WeakTopicAnalysis> analyses,
+                                                        int daysUntilExam,
+                                                        List<TodoTask> todayTasks) {
         List<StudyRoadmapItem> roadmap = new ArrayList<>();
         int planDays = Math.min(daysUntilExam, 14);
         if (planDays <= 0) planDays = 7;
@@ -312,8 +305,25 @@ public class PlannerService {
         LocalDate today = LocalDate.now();
         Set<String> scheduledToday = new HashSet<>();
 
-        // Distribute topics across days, weak topics appear more frequently
-        for (int day = 0; day < planDays; day++) {
+        // Day 1 mirrors today's tasks exactly. These were two independent
+        // generators before, so the roadmap's first day listed different topics,
+        // activities and durations than the Today list for the same date.
+        for (TodoTask task : todayTasks) {
+            roadmap.add(StudyRoadmapItem.builder()
+                    .topicTitle(task.getTopicTitle())
+                    .activityType(task.getActivityType())
+                    .day(1)
+                    .scheduledDate(today)
+                    .estimatedDurationMinutes(task.getEstimatedDurationMinutes())
+                    .complexityLevel(task.getComplexityLevel())
+                    .priorityLevel(task.getPriorityLevel())
+                    .completed(task.isCompleted())
+                    .build());
+            scheduledToday.add(task.getTopicTitle() + "_0");
+        }
+
+        // Distribute topics across the remaining days; weak topics recur more often
+        for (int day = 1; day < planDays; day++) {
             int tasksToday = 0;
             Set<String> dayTopics = new HashSet<>();
             LocalDate dayDate = today.plusDays(day);
@@ -400,10 +410,35 @@ public class PlannerService {
         for (WeakTopicAnalysis analysis : analyses) {
             StudyProgress progress = progressMap.get(analysis.getTopicId());
 
-            // Calculate days since last practice
-            int daysSinceLastPractice = 0;
-            if (progress != null && progress.getTotalAttempts() != null && progress.getTotalAttempts() > 0) {
-                // Estimate based on weakness level
+            String frequency;
+            LocalDate revisionDate;
+            int daysSinceLastPractice;
+
+            // When the learner has attempted this topic, the stored SM-2
+            // nextReviewDate (set by MasteryService after every quiz attempt)
+            // is the authoritative source for the visible revision schedule.
+            if (progress != null && progress.getNextReviewDate() != null) {
+                revisionDate = progress.getNextReviewDate();
+                LocalDate lastStudy = progress.getLastStudyDate() != null
+                        ? progress.getLastStudyDate()
+                        : today;
+                daysSinceLastPractice = (int) ChronoUnit.DAYS.between(lastStudy, today);
+                if (daysSinceLastPractice < 0) {
+                    daysSinceLastPractice = 0;
+                }
+
+                long daysUntilNext = ChronoUnit.DAYS.between(today, revisionDate);
+                if (daysUntilNext <= 0) {
+                    frequency = "Due now";
+                } else if (daysUntilNext == 1) {
+                    frequency = "Tomorrow";
+                } else if (daysUntilNext <= 3) {
+                    frequency = "Every few days";
+                } else {
+                    frequency = "Review in " + daysUntilNext + " days";
+                }
+            } else {
+                // Fallback heuristics for topics with no attempt history yet.
                 if (analysis.getWeaknessScore() >= 0.7) {
                     daysSinceLastPractice = 0; // Needs immediate revision
                 } else if (analysis.getWeaknessScore() >= 0.4) {
@@ -411,25 +446,19 @@ public class PlannerService {
                 } else {
                     daysSinceLastPractice = 5;
                 }
-            } else {
-                daysSinceLastPractice = 7; // Not attempted recently
-            }
-
-            // Determine revision frequency
-            String frequency;
-            LocalDate revisionDate;
-            if (analysis.getWeaknessScore() >= 0.7) {
-                frequency = "Every day";
-                revisionDate = today;
-            } else if (analysis.getWeaknessScore() >= 0.4) {
-                frequency = "Every 2 days";
-                revisionDate = today.plusDays(1);
-            } else if (analysis.getMasteryLevel() >= 90.0) {
-                frequency = "Every 7 days";
-                revisionDate = today.plusDays(5);
-            } else {
-                frequency = "Every 3 days";
-                revisionDate = today.plusDays(2);
+                if (analysis.getWeaknessScore() >= 0.7) {
+                    frequency = "Every day";
+                    revisionDate = today;
+                } else if (analysis.getWeaknessScore() >= 0.4) {
+                    frequency = "Every 2 days";
+                    revisionDate = today.plusDays(1);
+                } else if (analysis.getMasteryLevel() >= 90.0) {
+                    frequency = "Every 7 days";
+                    revisionDate = today.plusDays(5);
+                } else {
+                    frequency = "Every 3 days";
+                    revisionDate = today.plusDays(2);
+                }
             }
 
             schedule.add(RevisionScheduleItem.builder()

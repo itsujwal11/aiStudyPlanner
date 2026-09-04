@@ -18,4 +18,13 @@ public class TodoTask {
     private boolean completed;
     private Long topicId;
     private double weaknessScore;
+    /**
+     * Stable identity ({@code topicId:ACTIVITY_TYPE:sessionIndex}) used to
+     * persist a tick. Not the list position: the plan is re-ranked after every
+     * answer, so a positional key would mark the wrong topic as done.
+     */
+    private String taskKey;
+
+    /** Which repeat of this topic+activity this is; 0 unless a topic is split. */
+    private int sessionIndex;
 }

@@ -2,6 +2,7 @@ package com.aasa.controller;
 
 import com.aasa.entity.*;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -15,7 +16,6 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/admin")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class AdminController {
 
     private static final Logger logger = Logger.getLogger(AdminController.class.getName());
@@ -25,6 +25,9 @@ public class AdminController {
 
     @Autowired
     private com.aasa.service.AuthService authService;
+
+    @Autowired
+    private com.aasa.service.AdminDeletionService adminDeletionService;
 
     private static final Map<String, Class<?>> ENTITY_MAP = new LinkedHashMap<>();
     static {
@@ -129,10 +132,17 @@ public class AdminController {
     }
 
     @DeleteMapping("/entities/{entityName}/{id}")
-    @Transactional
     public ResponseEntity<?> deleteRecord(Authentication authentication, @PathVariable String entityName, @PathVariable Long id) {
+        // Resolve authorization up front so an anonymous or non-admin caller
+        // receives the same 403 as the other admin endpoints instead of the
+        // generic 500 produced by the fallback handler below.
         try {
             checkAdmin(authentication);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+        }
+
+        try {
             Class<?> clazz = ENTITY_MAP.get(entityName);
             if (clazz == null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Unknown entity: " + entityName));
@@ -141,52 +151,23 @@ public class AdminController {
             if (record == null) {
                 return ResponseEntity.notFound().build();
             }
-
-            deleteCascade(entityName, id);
-
-            record = entityManager.find(clazz, id);
-            if (record != null) {
-                entityManager.remove(record);
-                entityManager.flush();
+            if (record instanceof User target
+                    && target.getEmail().equalsIgnoreCase(authentication.getName())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", "You cannot delete your own admin account"));
             }
+
+            adminDeletionService.delete(entityName, id);
             logger.info("Admin deleted " + entityName + " #" + id);
             return ResponseEntity.ok(Map.of("success", true, "message", entityName + " #" + id + " deleted"));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             logger.severe("Admin delete error: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    private void deleteCascade(String entityName, Long id) {
-        switch (entityName) {
-            case "User" -> {
-                entityManager.createQuery("DELETE FROM QuizAttempt qa WHERE qa.user.id = :uid").setParameter("uid", id).executeUpdate();
-                entityManager.createQuery("DELETE FROM StudyProgress sp WHERE sp.user.id = :uid").setParameter("uid", id).executeUpdate();
-                List<Long> pdfIds = entityManager.createQuery("SELECT p.id FROM PdfDocument p WHERE p.user.id = :uid", Long.class)
-                        .setParameter("uid", id).getResultList();
-                for (Long pid : pdfIds) {
-                    deleteCascade("PdfDocument", pid);
-                }
-                entityManager.createQuery("DELETE FROM PdfDocument p WHERE p.user.id = :uid").setParameter("uid", id).executeUpdate();
-            }
-            case "PdfDocument" -> {
-                List<Long> topicIds = entityManager.createQuery("SELECT t.id FROM Topic t WHERE t.pdfDocument.id = :pid", Long.class)
-                        .setParameter("pid", id).getResultList();
-                for (Long tid : topicIds) {
-                    deleteCascade("Topic", tid);
-                }
-                entityManager.createQuery("DELETE FROM Topic t WHERE t.pdfDocument.id = :pid").setParameter("pid", id).executeUpdate();
-                entityManager.createQuery("DELETE FROM StudyProgress sp WHERE sp.pdfDocument.id = :pid").setParameter("pid", id).executeUpdate();
-            }
-            case "Topic" -> {
-                entityManager.createQuery("DELETE FROM QuizAttempt qa WHERE qa.quiz.topic.id = :tid").setParameter("tid", id).executeUpdate();
-                entityManager.createQuery("DELETE FROM Quiz q WHERE q.topic.id = :tid").setParameter("tid", id).executeUpdate();
-                entityManager.createQuery("DELETE FROM StudyProgress sp WHERE sp.topic.id = :tid").setParameter("tid", id).executeUpdate();
-            }
-            case "Quiz" -> {
-                entityManager.createQuery("DELETE FROM QuizAttempt qa WHERE qa.quiz.id = :qid").setParameter("qid", id).executeUpdate();
-            }
         }
     }
 

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { pdfAPI, dashboardAPI, adminAPI } from '../api'
+import { pdfAPI, dashboardAPI, adminAPI, quizAPI } from '../api'
 import { useCountUp } from '../hooks/useCountUp'
 import { motion } from 'framer-motion'
-import { Upload, BookOpen, TrendingUp, Zap, Target, BarChart3, ArrowRight, FileText, Users, Database, Brain, ClipboardList, AlertCircle } from 'lucide-react'
+import { Upload, BookOpen, TrendingUp, Zap, Target, BarChart3, ArrowRight, FileText, Users, Database, Brain, ClipboardList, AlertCircle, Loader } from 'lucide-react'
 
 function GlassStatCard({ icon: Icon, label, value, color = 'text-primary' }) {
   const count = useCountUp(value, 800)
@@ -95,6 +95,7 @@ export const Dashboard = () => {
   const [pdfs, setPdfs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [diagnosticAttempts, setDiagnosticAttempts] = useState(0)
   const { user, isAdmin } = useAuth()
   const navigate = useNavigate()
   useEffect(() => { fetchDashboard() }, [])
@@ -104,6 +105,13 @@ export const Dashboard = () => {
       const [dashRes, pdfRes] = await Promise.all([dashboardAPI.get(), pdfAPI.list()])
       setDashboard(dashRes.data)
       setPdfs(pdfRes.data)
+      const ready = (pdfRes.data || []).find(
+        (pdf) => (pdf.isAnalyzed || pdf.processingStatus === 'COMPLETED') && pdf.topicCount > 0
+      )
+      if (ready) {
+        const progressRes = await quizAPI.getProgress(ready.id)
+        setDiagnosticAttempts(progressRes.data?.attemptedCount || 0)
+      }
       setError('')
     } catch (err) {
       setError('Failed to load dashboard')
@@ -111,7 +119,35 @@ export const Dashboard = () => {
     } finally { setLoading(false) }
   }
 
+
+useEffect(() => {
+    const isProcessing = pdfs.some((pdf) => ['PENDING', 'PROCESSING'].includes(pdf.processingStatus))
+    if (!isProcessing) return undefined
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchDashboard()
+    }
+
+    // Refetch only when tab becomes visible (user returns to page)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pdfs, fetchDashboard])
+
   if (isAdmin) return <AdminDashboard />
+  const processingPdfs = pdfs.filter((pdf) => ['PENDING', 'PROCESSING'].includes(pdf.processingStatus))
+  const readyPdf = pdfs.find((pdf) =>
+    (pdf.isAnalyzed || pdf.processingStatus === 'COMPLETED') && pdf.topicCount > 0
+  )
+  const hasQuizProgress = dashboard?.rankedTopics?.some(
+    (topic) => (topic.totalAttempts || 0) > 0
+  )
+  const diagnosticTarget = Math.min(15, dashboard?.totalQuizzes || 0)
+  const diagnosticComplete = diagnosticTarget > 0 && diagnosticAttempts >= diagnosticTarget
+
+
 
   if (loading) {
     return (
@@ -132,7 +168,40 @@ export const Dashboard = () => {
           <p className="text-sm">{error}</p>
         </div>
       )}
+      {processingPdfs.length > 0 && (
+        <div className="glass-pane rounded-xl p-4 border border-primary/20 bg-primary/5 flex items-start gap-3">
+          <Loader className="w-5 h-5 text-primary animate-spin flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-on-surface">Generating your study content</p>
+            <p className="text-sm text-on-surface-variant/70 mt-1">
+              AI is creating topics and quizzes for {processingPdfs[0].fileName}. This normally takes 1 to 2 minutes. You may change pages; this dashboard updates automatically.
+            </p>
+          </div>
+        </div>
+      )}
 
+
+      {processingPdfs.length === 0 && readyPdf && (
+        <div className="glass-pane rounded-xl p-4 border border-emerald-200/60 bg-emerald-50/60 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-emerald-800">
+              {diagnosticComplete ? 'Your personalized practice is ready' : hasQuizProgress ? 'Continue your diagnostic quiz' : 'Your diagnostic quiz is ready'}
+            </p>
+            <p className="text-sm text-emerald-700/80 mt-1">
+              {diagnosticComplete
+                ? 'Practise weak topics while the planner and mastery estimates update after every answer.'
+                : 'Answer the short diagnostic so the planner can detect weak topics using enough evidence.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(diagnosticComplete ? `/practice/${readyPdf.id}` : `/diagnostic/${readyPdf.id}`)}
+            className="btn-glass-primary whitespace-nowrap"
+          >
+            {diagnosticComplete ? 'Practise Weak Topics' : hasQuizProgress ? 'Continue Diagnostic' : 'Start Diagnostic'} <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <div>
         <h1 className="text-2xl md:text-[40px] font-semibold text-on-surface leading-[48px]">
           My Dashboard
@@ -247,7 +316,13 @@ export const Dashboard = () => {
               >
                 <h3 className="font-semibold text-on-surface truncate">{pdf.fileName}</h3>
                 <p className="text-xs text-on-surface-variant/60 mt-1">Exam: {new Date(pdf.examDate).toLocaleDateString()}</p>
-                <p className="text-xs text-primary font-medium mt-2">{pdf.topicCount} topics &bull; {pdf.isAnalyzed ? 'Analyzed' : 'Pending'}</p>
+                <p className={`text-xs font-medium mt-2 ${pdf.processingStatus === 'FAILED' ? 'text-red-600' : 'text-primary'}`} title={pdf.processingError || ''}>
+                  {pdf.topicCount} topics &bull; {pdf.processingStatus === 'FAILED'
+                    ? 'Processing failed'
+                    : pdf.isAnalyzed || pdf.processingStatus === 'COMPLETED'
+                      ? 'Analyzed'
+                      : 'Processing...'}
+                </p>
               </motion.div>
             ))}
             {pdfs.length === 0 && (

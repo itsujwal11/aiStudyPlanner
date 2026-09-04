@@ -30,6 +30,22 @@ public class GeminiAiService {
     private static final int TIMEOUT_SECONDS = 300;
     private static final int MAX_RETRIES     = 3;
     private static final int MAX_TOPICS      = 20;
+
+    /**
+     * Questions generated per topic.
+     *
+     * <p>This is the size of the entire question bank: it is generated once at
+     * upload and never grows. At 3 it was smaller than
+     * {@code WeaknessEngineService.MINIMUM_EVIDENCE_ATTEMPTS = 3} allows to be
+     * useful — a learner had to answer every question a topic owns just to leave
+     * {@code INSUFFICIENT_DATA}, and Practice then had nothing left to serve, so
+     * it re-served answered items and fed memorised answers back into the
+     * mastery model as fresh evidence. Six leaves headroom for a diagnostic pass
+     * plus genuine practice, split two per difficulty so the difficulty
+     * weighting in the evidence formula (EASY 1.0 / MEDIUM 1.5 / HARD 2.0) stays
+     * balanced.</p>
+     */
+    private static final int QUESTIONS_PER_TOPIC = 6;
     private static final int MAX_TEXT_LENGTH = 100_000;
 
     @Value("${gemini.api.key}")
@@ -38,6 +54,7 @@ public class GeminiAiService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(30))
+            .version(HttpClient.Version.HTTP_1_1)
             .build();
 
     public AiAnalysisResponse analyzeContent(String extractedText) throws Exception {
@@ -53,7 +70,7 @@ public class GeminiAiService {
             String apiVersion = endpoint[0];
             String model = endpoint[1];
             logger.info("Trying Gemini model: " + model + " (API " + apiVersion + ")");
-            String url = "https://generativelanguage.googleapis.com/" + apiVersion + "/models/" + model + ":generateContent?key=";
+            String url = "https://generativelanguage.googleapis.com/" + apiVersion + "/models/" + model + ":generateContent";
 
             try {
                 String responseJson = callGeminiApi(prompt, url);
@@ -90,12 +107,11 @@ public class GeminiAiService {
         genConfig.put("temperature", 0.2);
 
         String requestBody = objectMapper.writeValueAsString(root);
-        String fullUrl = baseUrl + apiKey;
-
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(fullUrl))
+                .uri(URI.create(baseUrl))
                 .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
                 .header("Content-Type", "application/json")
+                .header("x-goog-api-key", apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 
@@ -128,11 +144,26 @@ public class GeminiAiService {
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw e;
+                throw new Exception("Request was interrupted", e);
+            } catch (java.io.IOException e) {
+                // Network errors (connection refused, timeout, DNS failure, etc.)
+                retries++;
+                if (retries >= MAX_RETRIES) {
+                    logger.severe("Network error after " + retries + " retries: " + e.getMessage());
+                    throw new Exception("Network error: " + e.getMessage() + " (after " + retries + " retries)", e);
+                }
+                long waitMs = (long) Math.pow(2, retries) * 3000;
+                logger.warning("Network error (attempt " + retries + "/" + MAX_RETRIES + "): " + e.getMessage() + ", retrying in " + waitMs + "ms");
+                try {
+                    Thread.sleep(waitMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new Exception("Request was interrupted during retry wait", ie);
+                }
             }
         }
 
-        throw new Exception("Exhausted retries for rate limiting");
+        throw new Exception("Exhausted all retries for Gemini API call");
     }
 
     private String extractTextFromResponse(String responseBody) throws Exception {
@@ -221,8 +252,11 @@ public class GeminiAiService {
                 : fullText;
 
         return "Analyze the following study material. Extract up to " + maxTopics
-                + " distinct topics. For each topic, generate exactly 3 multiple-choice questions "
-                + "(difficulty: easy, medium, hard) based ONLY on the provided text. "
+                + " distinct topics. For each topic, generate exactly "
+                + QUESTIONS_PER_TOPIC + " multiple-choice questions based ONLY on the "
+                + "provided text: 2 easy, 2 medium and 2 hard. Every question must be "
+                + "answerable from the text alone and must not duplicate another question "
+                + "for the same topic. "
                 + "Return ONLY a valid JSON array following this exact structure:\n\n"
                 + "[{\n"
                 + "  \"title\": \"Topic Name\",\n"
@@ -242,9 +276,9 @@ public class GeminiAiService {
                 + "      \"answer\": \"Exactly one of the options\",\n"
                 + "      \"difficulty\": \"easy\",\n"
                 + "      \"explanation\": \"Why this answer is correct\"\n"
-                + "    },\n"
-                + "    { ... },\n"
-                + "    { ... }\n"
+                + "    }\n"
+                + "    // ... " + QUESTIONS_PER_TOPIC + " objects in total: "
+                + "2 with difficulty \"easy\", 2 \"medium\", 2 \"hard\"\n"
                 + "  ]\n"
                 + "}]\n\n"
                 + "Material:\n" + text;

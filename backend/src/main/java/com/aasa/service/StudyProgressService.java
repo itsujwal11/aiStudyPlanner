@@ -42,10 +42,16 @@ public class StudyProgressService {
     private WeaknessEngineService weaknessEngineService;
 
     @Autowired
-    private ScoringEngineService scoringEngineService;
+    private AdaptivePriorityService adaptivePriorityService;
 
     @Autowired
     private MasteryService masteryService;
+
+    @Autowired
+    private LearnerFeatureService learnerFeatureService;
+
+    @Autowired
+    private MlWeaknessClient mlWeaknessClient;
 
     public StudyProgress getOrCreateProgress(User user, Topic topic) {
         logger.info("Getting or creating progress for user " + user.getId() + " and topic " + topic.getId());
@@ -86,17 +92,35 @@ public class StudyProgressService {
         Double completionPercentage = (progress.getCorrectAttempts() * 100.0) / progress.getTotalAttempts();
         progress.setCompletionPercentage(completionPercentage);
 
-        StudyProgress.WeaknessLevel weaknessLevel = weaknessEngineService.calculateWeaknessLevel(score);
-        progress.setWeaknessLevel(weaknessLevel);
-
         MasteryService.SpacedRepetitionResult sr = masteryService.updateAfterAttempt(
                 user, topic, progress,
                 attempt.getIsCorrect(),
                 attempt.getTimeTakenSeconds() != null ? attempt.getTimeTakenSeconds().intValue() : 0
         );
 
-        logger.info("Updated progress - Score: " + score + ", Weakness: " + weaknessLevel
+        List<QuizAttempt> attempts = quizAttemptRepository.findByUserIdAndTopicId(user.getId(), topic.getId());
+        WeaknessEngineService.WeaknessResult evidence = weaknessEngineService.calculateEvidenceBasedWeakness(
+                attempts, sr.mastery, progress.getNextReviewDate());
+
+        // Hybrid weakness: 0.70 * evidence + 0.30 * (1 - P(correct on next attempt)).
+        // The model call is fail-soft — an empty result leaves the evidence score
+        // untouched, so a missing or unreachable model never blocks a submission.
+        Double modelWeakness = mlWeaknessClient
+                .predictWeakness(learnerFeatureService.extract(attempts))
+                .orElse(null);
+        WeaknessEngineService.WeaknessResult weakness =
+                weaknessEngineService.blendWithModel(evidence, modelWeakness);
+
+        progress.setWeaknessLevel(weakness.level());
+        topic.setWeaknessScore(weakness.score());
+
+        logger.info("Updated progress - Score: " + score + ", Weakness: " + weakness.level()
                 + ", Mastery: " + String.format("%.4f", sr.mastery)
+                + ", Evidence: " + String.format("%.4f", evidence.score())
+                + ", Model: " + (modelWeakness == null
+                        ? "unavailable (evidence only)"
+                        : String.format("%.4f", modelWeakness))
+                + ", Hybrid: " + String.format("%.4f", weakness.score())
                 + ", Next review: " + progress.getNextReviewDate());
 
         studyProgressRepository.save(progress);
@@ -116,18 +140,26 @@ public class StudyProgressService {
 
             if (progress != null) {
                 PdfDocument pdf = topic.getPdfDocument();
-                long daysUntilExam = ChronoUnit.DAYS.between(LocalDate.now(), pdf.getExamDate());
 
-                Double weaknessScore = weaknessEngineService.getWeaknessScore(progress.getWeaknessLevel());
+                Double weaknessScore = topic.getWeaknessScore() != null
+                        ? topic.getWeaknessScore()
+                        : weaknessEngineService.getWeaknessScore(progress.getWeaknessLevel());
 
-                Double priorityScore = scoringEngineService.calculatePriorityScore(
-                        topic.getComplexityScore(),
+                // Adaptive priority from real learner evidence:
+                // BKT mastery gap + forgetting risk since last revision + exam urgency + importance.
+                double mastery = progress.getMasteryLevel() != null
+                        ? progress.getMasteryLevel()
+                        : 1.0 - weaknessScore;
+
+                Double priorityScore = adaptivePriorityService.calculatePriority(
+                        mastery,
                         topic.getImportanceScore(),
-                        weaknessScore,
-                        (int) daysUntilExam
+                        pdf.getExamDate(),
+                        progress.getLastStudyDate()
                 );
 
-                logger.info("Topic: " + topic.getTitle() + " - Weakness: " + weaknessScore + ", Priority: " + priorityScore + ", Days: " + daysUntilExam);
+                logger.info("Topic: " + topic.getTitle() + " - Mastery: " + mastery
+                        + ", Weakness: " + weaknessScore + ", Priority: " + priorityScore);
 
                 // Update both the specific weakness score and the priority on the topic for UI consistency
                 topic.setWeaknessScore(weaknessScore);

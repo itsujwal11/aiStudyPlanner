@@ -1,3 +1,4 @@
+@import './auth.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,6 +9,10 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   font-family: 'Hanken Grotesk', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -15,6 +20,7 @@ body {
   background: #eef0f4;
   color: #191c1e;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* ── Mesh Gradient Background ── */

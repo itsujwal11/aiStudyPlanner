@@ -27,6 +27,9 @@ public class TopicAnalysisService {
     private TopicRepository topicRepository;
 
     @Autowired
+    private AdaptivePriorityService adaptivePriorityService;
+
+    @Autowired
     private ScoringEngineService scoringEngineService;
 
     @Autowired
@@ -49,7 +52,16 @@ public class TopicAnalysisService {
             topicRepository.deleteByPdfDocumentId(pdfDocument.getId());
         }
 
-        AiAnalysisResponse aiResponse = geminiAiService.analyzeContent(pdfDocument.getExtractedText());
+        // Call external AI API OUTSIDE the transaction to avoid rollback-only issues
+        // when the API fails or times out
+        AiAnalysisResponse aiResponse;
+        try {
+            aiResponse = geminiAiService.analyzeContent(pdfDocument.getExtractedText());
+        } catch (Exception e) {
+            logger.severe("Gemini API call failed: " + e.getMessage());
+            throw e; // Re-throw to fail the operation
+        }
+
         logger.info("Received " + aiResponse.getTopics().size() + " topics from AI");
 
         long daysUntilExam = ChronoUnit.DAYS.between(LocalDate.now(), pdfDocument.getExamDate());
@@ -105,11 +117,13 @@ public class TopicAnalysisService {
                 signals.getLength() != null ? signals.getLength() : 100
         );
 
-        Double priorityScore = scoringEngineService.calculatePriorityScore(
-                complexityScore,
-                importanceScore,
+        // Initial adaptive priority before any quiz evidence exists:
+        // full mastery gap (NOT_ATTEMPTED), no accumulated forgetting yet, exam urgency, AI importance.
+        Double priorityScore = adaptivePriorityService.calculatePriorityFromWeakness(
                 1.0, // Default weakness score for NOT_ATTEMPTED
-                daysUntilExam
+                importanceScore,
+                pdfDocument.getExamDate(),
+                null
         );
 
         logger.info("Topic scores - Complexity: " + complexityScore + ", Importance: " + importanceScore + ", Priority: " + priorityScore);
@@ -170,39 +184,6 @@ public class TopicAnalysisService {
         topic.setPriorityScore(newPriority);
         topicRepository.save(topic);
     }
-
-    // private void generateFlashcardsForTopic(Topic topic, AiAnalysisResponse.TopicAnalysis analysis) {
-    //     String desc = analysis.getDescription();
-    //     if (desc == null || desc.isBlank()) {
-    //         desc = "Study topic: " + topic.getTitle();
-    //     }
-    //     flashcardService.createFlashcard(topic,
-    //             "What is " + topic.getTitle() + "?",
-    //             desc,
-    //             topic.getComplexityScore());
-    //     String[] sentences = desc.split("[.!?]");
-    //     if (sentences.length >= 2) {
-    //         String second = sentences[1].trim();
-    //         if (!second.isBlank()) {
-    //             flashcardService.createFlashcard(topic,
-    //                     "Explain: " + topic.getTitle(),
-    //                     second,
-    //                     topic.getComplexityScore());
-    //         }
-    //     }
-    //     if (analysis.getQuiz() != null) {
-    //         for (int i = 0; i < Math.min(analysis.getQuiz().size(), 3); i++) {
-    //             AiAnalysisResponse.TopicAnalysis.QuizQuestion q = analysis.getQuiz().get(i);
-    //             if (q.getQuestion() != null && q.getAnswer() != null) {
-    //                 flashcardService.createFlashcard(topic,
-    //                         q.getQuestion(),
-    //                         q.getAnswer() + (q.getExplanation() != null ? " — " + q.getExplanation() : ""),
-    //                         topic.getComplexityScore());
-    //             }
-    //         }
-    //     }
-    //     logger.info("Generated flashcards for topic: " + topic.getTitle());
-    // }
 
     private TopicDto convertToDto(Topic topic) {
         return TopicDto.builder()

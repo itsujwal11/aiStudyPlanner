@@ -6,6 +6,8 @@ import com.aasa.entity.User;
 import com.aasa.repository.*;
 import com.aasa.service.AuthService;
 import com.aasa.service.PdfManagementService;
+import com.aasa.service.PdfProcessingService;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,13 +22,15 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/pdfs")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class PdfController {
 
     private static final Logger logger = Logger.getLogger(PdfController.class.getName());
 
     @Autowired
     private PdfManagementService pdfManagementService;
+
+    @Autowired
+    private PdfProcessingService pdfProcessingService;
 
     @Autowired
     private AuthService authService;
@@ -80,6 +84,7 @@ public class PdfController {
 
         PdfDocumentDto result = pdfManagementService.uploadPdf(file, user, parsedDate);
         logger.info("PDF uploaded successfully with ID: " + result.getId());
+        pdfProcessingService.processAsync(result.getId());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
@@ -97,11 +102,17 @@ public class PdfController {
     }
 
     @GetMapping("/{pdfId}")
-    public ResponseEntity<PdfDocumentDto> getPdf(@PathVariable Long pdfId) {
+    public ResponseEntity<PdfDocumentDto> getPdf(
+            @PathVariable Long pdfId,
+            Authentication authentication) {
         try {
-            return ResponseEntity.ok(pdfManagementService.getPdfByIdDto(pdfId));
-        } catch (Exception e) {
+            User user = authService.getUserByEmail(authentication.getName());
+            return ResponseEntity.ok(pdfManagementService.getPdfByIdDto(pdfId, user.getId()));
+        } catch (EntityNotFoundException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        } catch (Exception e) {
+            logger.severe("Error fetching PDF: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
@@ -110,53 +121,79 @@ public class PdfController {
         try {
             User user = authService.getUserByEmail(authentication.getName());
             return ResponseEntity.ok(pdfManagementService.getPdfDetail(pdfId, user.getId()));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         } catch (Exception e) {
             logger.severe("Error fetching PDF detail: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     @DeleteMapping("/{pdfId}")
-    public ResponseEntity<Void> deletePdf(@PathVariable Long pdfId) {
+    public ResponseEntity<Void> deletePdf(
+            @PathVariable Long pdfId,
+            Authentication authentication) {
         try {
-            pdfManagementService.deletePdf(pdfId);
+            User user = authService.getUserByEmail(authentication.getName());
+            pdfManagementService.deletePdf(pdfId, user.getId());
             return ResponseEntity.noContent().build();
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         } catch (Exception e) {
+            logger.severe("Error deleting PDF: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     @DeleteMapping("/reset")
-    public ResponseEntity<Void> resetAll(Authentication authentication) {
+    public ResponseEntity<?> resetAll(Authentication authentication) {
         try {
             User user = authService.getUserByEmail(authentication.getName());
             logger.info("Resetting all data for user ID: " + user.getId());
 
-            // Delete in order: quiz_attempts > study_progress > quizzes > topics > pdfs
-            quizAttemptRepository.deleteByUserId(user.getId());
-            studyProgressRepository.deleteByUserId(user.getId());
-
-            // Get all topics for user and delete quizzes first
-            List<com.aasa.entity.Topic> topics = topicRepository.findByUserIdOrderByPriority(user.getId());
-            for (com.aasa.entity.Topic topic : topics) {
-                quizRepository.deleteByTopicId(topic.getId());
-            }
-
-            // Delete PDFs (cascades topics)
-            List<PdfDocument> pdfs = pdfManagementService.getUserPdfs(user.getId())
-                    .stream()
-                    .map(dto -> pdfManagementService.getPdfById(dto.getId()))
-                    .toList();
-            for (PdfDocument pdf : pdfs) {
-                pdfManagementService.deletePdf(pdf.getId());
-            }
+            pdfManagementService.resetAllUserData(user);
 
             logger.info("All data reset successfully for user ID: " + user.getId());
             return ResponseEntity.noContent().build();
         } catch (Exception e) {
             logger.severe("Error resetting data: " + e.getMessage());
             e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown reset error";
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to reset user data", "message", errorMessage));
+        }
+    }
+
+    @PutMapping("/{pdfId}/exam-date")
+    public ResponseEntity<?> updateExamDate(
+            @PathVariable Long pdfId,
+            @RequestBody Map<String, String> body,
+            Authentication authentication) {
+        try {
+            User user = authService.getUserByEmail(authentication.getName());
+
+            String examDateStr = body.get("examDate");
+            if (examDateStr == null || examDateStr.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "examDate is required"));
+            }
+
+            java.time.LocalDate parsedDate;
+            try {
+                parsedDate = java.time.LocalDate.parse(examDateStr);
+            } catch (java.time.format.DateTimeParseException dtpe) {
+                logger.warning("Invalid examDate format: " + examDateStr);
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Invalid examDate format. Expected YYYY-MM-DD"));
+            }
+
+            PdfDocumentDto dto = pdfManagementService.updateExamDate(pdfId, parsedDate, user.getId());
+            return ResponseEntity.ok(dto);
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "PDF not found"));
+        } catch (Exception e) {
+            logger.severe("Error updating exam date: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to update exam date"));
         }
     }
 

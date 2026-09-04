@@ -12,6 +12,15 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     List<QuizAttempt> findByUserId(Long userId);
     List<QuizAttempt> findByQuizId(Long quizId);
 
+    @Query("SELECT DISTINCT qa.quiz.id FROM QuizAttempt qa WHERE qa.user.id = ?1")
+    List<Long> findAttemptedQuizIdsByUserId(Long userId);
+
+    @Query("SELECT DISTINCT qa.quiz.id FROM QuizAttempt qa WHERE qa.user.id = ?1 AND qa.quiz.topic.pdfDocument.id = ?2")
+    List<Long> findAttemptedQuizIdsByUserIdAndPdfId(Long userId, Long pdfId);
+
+    @Query("SELECT qa FROM QuizAttempt qa JOIN FETCH qa.quiz q WHERE qa.user.id = ?1 AND q.topic.id = ?2 ORDER BY qa.attemptTime ASC")
+    List<QuizAttempt> findByUserIdAndTopicId(Long userId, Long topicId);
+
     @Query("SELECT AVG(CASE WHEN qa.isCorrect = true THEN 100.0 ELSE 0.0 END) FROM QuizAttempt qa WHERE qa.user.id = ?1")
     Double getAverageScore(Long userId);
 

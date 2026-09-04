@@ -1,0 +1,51 @@
+.auth-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0.75rem;
+  color: #b91c1c;
+  font-size: 0.875rem;
+  background: rgba(254, 242, 242, 0.85);
+  border: 1px solid rgba(254, 202, 202, 0.7);
+}
+
+.auth-error svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.auth-success {
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0.75rem;
+  color: #065f46;
+  font-size: 0.875rem;
+  background: rgba(236, 253, 245, 0.85);
+  border: 1px solid rgba(167, 243, 208, 0.7);
+}
+
+.auth-divider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.25rem 0;
+  color: rgba(65, 71, 85, 0.5);
+  font-size: 0.75rem;
+}
+
+.auth-divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.auth-divider span {
+  position: relative;
+  padding: 0 0.75rem;
+  background: rgba(255, 255, 255, 0.82);
+}

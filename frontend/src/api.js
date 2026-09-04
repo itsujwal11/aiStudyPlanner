@@ -35,7 +35,11 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
-  seedAdmin: () => api.post('/auth/seed-admin'),
+  verifyEmail: (data) => api.post('/auth/verify-email', data),
+  resendVerification: (data) => api.post('/auth/resend-verification', data),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
+  google: (data) => api.post('/auth/google', data),
 }
 
 export const pdfAPI = {
@@ -51,6 +55,7 @@ export const pdfAPI = {
   getById: (pdfId) => api.get(`/pdfs/${pdfId}`),
   getDetail: (pdfId) => api.get(`/pdfs/${pdfId}/detail`),
   delete: (pdfId) => api.delete(`/pdfs/${pdfId}`),
+  updateExamDate: (pdfId, examDate) => api.put(`/pdfs/${pdfId}/exam-date`, { examDate }),
   reset: () => api.delete('/pdfs/reset'),
 }
 
@@ -66,6 +71,7 @@ export const quizAPI = {
   getByTopic: (topicId) => api.get(`/quizzes/topic/${topicId}`),
   getById: (quizId) => api.get(`/quizzes/${quizId}`),
   submit: (quizId, data) => api.post(`/quizzes/${quizId}/submit`, data),
+  getProgress: (pdfId) => api.get('/quizzes/progress', { params: pdfId ? { pdfId } : {} }),
 }
 
 export const dashboardAPI = {
@@ -88,21 +94,25 @@ export const recommendationAPI = {
 
 export const plannerAPI = {
   get: () => api.get('/planner'),
+  // Persist a task tick for today. Server keys it by topic+activity+session,
+  // so it survives the plan being re-ranked after a quiz answer.
+  toggleTask: ({ topicId, activityType, sessionIndex = 0, completed }) =>
+    api.post('/planner/tasks/toggle', { topicId, activityType, sessionIndex, completed }),
 };
 
 export const studyPlanAPI = {
   generate: (payload) => api.post('/study-plan/generate', payload),
 };
 
-export const flashcardAPI = {
-  getByTopic: (topicId) => api.get(`/flashcards/topic/${topicId}`),
-  getByPdf: (pdfId) => api.get(`/flashcards/pdf/${pdfId}`),
-  review: (flashcardId, rating) => api.post(`/flashcards/${flashcardId}/review`, { rating }),
-  getDue: () => api.get('/flashcards/due'),
-};
-
 export const reportAPI = {
   generateStudyReport: () => api.get('/reports/study-report'),
+};
+
+export const ragAPI = {
+  getPredefinedAnswers: (pdfId) =>
+    api.get('/rag/predefined', { params: pdfId ? { pdfId } : {} }),
+  // Full RAG pipeline: retrieve → rerank → grounded answer with sources
+  ask: (question, pdfId) => api.post('/rag/ask', { question, pdfId: pdfId ?? null }),
 };
 
 export const adminAPI = {

@@ -1,0 +1,102 @@
+{
+  "dataset": {
+    "source_rows": 525534,
+    "usable_rows": 283105,
+    "removed_rows": 242429,
+    "students": 4163,
+    "original_columns": 30,
+    "features": [
+      "previous_attempts",
+      "previous_accuracy",
+      "average_response_time",
+      "recent_accuracy",
+      "opportunity"
+    ],
+    "target": "correct",
+    "class_counts": {
+      "0": 96783,
+      "1": 186322
+    }
+  },
+  "split": {
+    "train": {
+      "samples": 200560,
+      "students": 2914
+    },
+    "validation": {
+      "samples": 40332,
+      "students": 624
+    },
+    "test": {
+      "samples": 42213,
+      "students": 625
+    }
+  },
+  "models": {
+    "logistic_regression": {
+      "validation": {
+        "accuracy": 0.6424923137954974,
+        "precision": 0.7884779444974156,
+        "recall": 0.606266399135669,
+        "f1_score": 0.6854699736055668,
+        "roc_auc": 0.7108439453239092,
+        "confusion_matrix": [
+          [
+            10201,
+            4215
+          ],
+          [
+            10204,
+            15712
+          ]
+        ]
+      }
+    },
+    "random_forest": {
+      "validation": {
+        "accuracy": 0.6657492809679659,
+        "precision": 0.7779764832118746,
+        "recall": 0.6714384935946905,
+        "f1_score": 0.7207919971832736,
+        "roc_auc": 0.7236750671811037,
+        "confusion_matrix": [
+          [
+            9450,
+            4966
+          ],
+          [
+            8515,
+            17401
+          ]
+        ]
+      }
+    }
+  },
+  "random_forest_parameters": {
+    "n_estimators": 200,
+    "max_depth": 12,
+    "min_samples_leaf": 20,
+    "class_weight": "balanced",
+    "random_state": 42
+  },
+  "selected_model": "random_forest",
+  "test": {
+    "accuracy": 0.6646056901902258,
+    "precision": 0.7837674867342016,
+    "recall": 0.6895246852454379,
+    "f1_score": 0.7336318482841662,
+    "roc_auc": 0.7045104897954746,
+    "confusion_matrix": [
+      [
+        8558,
+        5379
+      ],
+      [
+        8779,
+        19497
+      ]
+    ]
+  },
+  "weakness_formula": "1 - probability_correct",
+  "hybrid_formula": "0.70 * evidence + 0.30 * ml_weakness"
+}

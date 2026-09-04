@@ -19,8 +19,7 @@ public class Quiz {
     @JoinColumn(name = "topic_id", nullable = false)
     private Topic topic;
 
-    @Column(nullable = false)
-    @Lob
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String question;
 
     @Column(name = "option_a", nullable = false)
@@ -42,8 +41,7 @@ public class Quiz {
     @Enumerated(EnumType.STRING)
     private DifficultyLevel difficulty;
 
-    @Column(name = "explanation")
-    @Lob
+    @Column(name = "explanation", columnDefinition = "TEXT")
     private String explanation;
 
     public enum DifficultyLevel {

@@ -4,16 +4,17 @@ import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LogOut, LayoutDashboard, Database, Upload, BookOpen, LineChart,
-  Lightbulb, FileText, User, Menu, X
+  FileText, User, Menu, X, HelpCircle, Target, MessageSquare
 } from 'lucide-react'
 
 const userNav = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/upload', label: 'Upload', icon: Upload },
   { path: '/study', label: 'Study', icon: BookOpen },
+  { path: '/ai-chat', label: 'AI Chat', icon: MessageSquare },
+  { path: '/quick-answers', label: 'Quick Answers', icon: HelpCircle },
+  { path: '/practice', label: 'Practice', icon: Target },
   { path: '/analytics', label: 'Analytics', icon: LineChart },
-  { path: '/recommendations', label: 'Recommend', icon: Lightbulb },
-  // { path: '/flashcards', label: 'Flashcards', icon: Brain },
   { path: '/planner', label: 'Planner', icon: FileText },
   { path: '/profile', label: 'Profile', icon: User },
 ]
@@ -63,6 +64,8 @@ export const Sidebar = () => {
         {navItems.map((item) => {
           const Icon = item.icon
           const isActive = navigate.pathname === item.path
+            || (item.path === '/study' && navigate.pathname.startsWith('/study/'))
+            || (item.path === '/practice' && (navigate.pathname.startsWith('/practice/') || navigate.pathname.startsWith('/diagnostic/')))
           return (
             <button
               key={item.path}

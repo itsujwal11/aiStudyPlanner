@@ -1,480 +1,302 @@
-# Adaptive AI Study Planner - Complete System Implementation
+# AASA - Adaptive AI Study Architect
 
-## 🎯 Project Status: COMPLETE ✅
+> Turn one lecture PDF into an adaptive study programme. Upload PDF + exam date → get topics, MCQ quizzes, grounded Q&A, and a personalised plan that re-ranks itself after every answer.
 
-All 10 broken systems have been debugged, fixed, and fully connected. The system is now production-ready.
-
----
-
-## 📋 What Was Fixed
-
-| # | System | Status | Details |
-|---|--------|--------|---------|
-| 1 | PDF Upload | ✅ FIXED | File validation, text extraction, error handling |
-| 2 | PDF Text Extraction | ✅ FIXED | Text cleaning, UTF-8 encoding, corruption removal |
-| 3 | Gemini API Integration | ✅ FIXED | Timeout handling, error handling, response parsing |
-| 4 | AI Response Parsing | ✅ FIXED | JSON validation, error handling, fallback logic |
-| 5 | Quiz Generation | ✅ FIXED | Question validation, duplicate detection, error handling |
-| 6 | Priority Algorithm | ✅ FIXED | Dynamic recalculation, urgency calculation, logging |
-| 7 | Weakness Tracking | ✅ FIXED | Score-based calculation, automatic updates, logging |
-| 8 | Dashboard Updates | ✅ FIXED | Real-time data, adaptive ranking, error handling |
-| 9 | Backend Services | ✅ FIXED | Dependency injection, logging, error handling |
-| 10 | End-to-End Workflow | ✅ FIXED | Complete pipeline, error handling, logging |
+[![Java](https://img.shields.io/badge/Java-17-blue.svg)](https://openjdk.org/projects/jdk/17/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://react.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169e1.svg)](https://www.postgresql.org/)
+[![pgvector](https://img.shields.io/badge/pgvector-enabled-orange.svg)](https://github.com/pgvector/pgvector)
+[![Python](https://img.shields.io/badge/Python-3.11-3776ab.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688.svg)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## 📁 Project Structure
+## System Workflow
+
+```
+┌─────────────┐     HTTPS/JSON/JWT     ┌──────────────────┐
+│   Browser   │ ──────────────────────▶ │  Spring Boot API │
+│  React 18   │                         │   Java 17, 9096  │
+│   + Vite    │ ◀────────────────────── │  (35 services)   │
+└─────────────┘                         └────────┬─────────┘
+                                                  │
+                    ┌─────────────────────────────┼─────────────────────────────┐
+                    ▼                             ▼                             ▼
+            ┌───────────────┐            ┌─────────────────┐            ┌──────────────┐
+            │  PostgreSQL 17 │            │  ml-service     │            │  Google      │
+            │  + pgvector    │            │  FastAPI :8000  │            │  Gemini API  │
+            │  (relational   │            │  Random Forest  │            │  (embeddings,│
+            │   + vectors)   │            │  (283k rows)    │            │   generation)│
+            └───────────────┘            └─────────────────┘            └──────────────┘
+```
+
+### Request Flow
+
+1. **Upload** → `POST /api/pdfs` → immediate `PENDING` response → background processing
+2. **Processing** → text extraction → chunking (~512 tokens) → Gemini embeddings (768-dim) → pgvector storage
+3. **Polling** → Frontend polls `GET /api/pdfs` every 10s until `COMPLETED`
+4. **Study** → Diagnostic quiz → mastery update → adaptive planner re-ranks
+5. **RAG** → Question → query embedding → cosine search top-20 → hybrid rerank → top-5 → Gemini answer with citations
+
+---
+
+## Code Organization — File-to-Function Map
+
+### Authentication & Security
+
+| File | Purpose |
+|---|---|
+| `backend/src/main/java/com/aasa/security/SecurityConfig.java` | CORS, security filter chain, password encoder |
+| `backend/src/main/java/com/aasa/security/JwtTokenProvider.java` | JWT generation & validation |
+| `backend/src/main/java/com/aasa/security/JwtAuthenticationFilter.java` | JWT extraction from requests |
+| `backend/src/main/java/com/aasa/controller/AuthController.java` | Register, login, OTP, Google Sign-In |
+| `backend/src/main/java/com/aasa/service/UserService.java` | User management |
+| `frontend/src/context/AuthContext.jsx` | Auth state management |
+| `frontend/src/pages/Login.jsx` | Login page |
+| `frontend/src/pages/Register.jsx` | Registration page |
+
+### PDF Upload & Processing
+
+| File | Purpose |
+|---|---|
+| `backend/src/main/java/com/aasa/controller/PdfController.java` | PDF CRUD endpoints |
+| `backend/src/main/java/com/aasa/service/PdfManagementService.java` | PDF lifecycle management |
+| `backend/src/main/java/com/aasa/service/PdfProcessingService.java` | Async processing orchestration |
+| `backend/src/main/java/com/aasa/service/PdfExtractionService.java` | Text extraction from PDF |
+| `backend/src/main/java/com/aasa/service/DocumentChunkingService.java` | Semantic chunking |
+| `backend/src/main/java/com/aasa/entity/PdfDocument.java` | PDF entity |
+| `backend/src/main/java/com/aasa/entity/DocumentChunk.java` | Chunk entity |
+| `frontend/src/pages/UploadPdf.jsx` | Upload page |
+| `frontend/src/pages/PdfDetail.jsx` | PDF detail & topics page |
+
+### RAG / Q&A / Quiz
+
+| File | Purpose |
+|---|---|
+| `backend/src/main/java/com/aasa/controller/RagController.java` | RAG query endpoints |
+| `backend/src/main/java/com/aasa/service/RagAugmentedService.java` | RAG orchestration |
+| `backend/src/main/java/com/aasa/service/VectorSearchService.java` | pgvector similarity search |
+| `backend/src/main/java/com/aasa/service/EmbeddingService.java` | Gemini embedding generation |
+| `backend/src/main/java/com/aasa/service/RerankingService.java` | Hybrid reranking (vector + keyword + title) |
+| `backend/src/main/java/com/aasa/controller/QuizController.java` | Quiz endpoints |
+| `backend/src/main/java/com/aasa/service/QuizEngineService.java` | Quiz generation & management |
+| `backend/src/main/java/com/aasa/controller/TopicController.java` | Topic endpoints |
+| `frontend/src/pages/AiChat.jsx` | RAG chat interface |
+| `frontend/src/pages/QuickAnswers.jsx` | Quick answers page |
+| `frontend/src/pages/Study.jsx` | Study & quiz page |
+
+### Knowledge Tracing & Mastery
+
+| File | Purpose |
+|---|---|
+| `backend/src/main/java/com/aasa/service/BayesianKnowledgeTracingService.java` | BKT mastery update |
+| `backend/src/main/java/com/aasa/service/MasteryService.java` | Mastery tracking |
+| `backend/src/main/java/com/aasa/service/WeaknessEngineService.java` | Evidence-based weakness scoring |
+| `backend/src/main/java/com/aasa/service/AdaptivePriorityService.java` | Priority calculation |
+| `backend/src/main/java/com/aasa/service/PlannerService.java` | Study plan generation |
+| `backend/src/main/java/com/aasa/controller/PlannerController.java` | Planner endpoints |
+
+### ML Weakness Model
+
+| File | Purpose |
+|---|---|
+| `backend/src/main/java/com/aasa/service/MlWeaknessClient.java` | ML service HTTP client |
+| `backend/src/main/java/com/aasa/service/LearnerFeatureService.java` | Feature extraction for ML |
+| `ml/train_model.py` | Trains Random Forest on ASSISTments dataset |
+| `ml/serve.py` | FastAPI inference server |
+| `ml/requirements.txt` | Training dependencies |
+| `ml/requirements-serve.txt` | Serving dependencies |
+| `ml/models/weakness_model.joblib` | Trained model (gitignored) |
+
+### Frontend Polling & Notifications
+
+| File | Purpose |
+|---|---|
+| `frontend/src/hooks/useBackgroundProcessingNotifications.js` | Polling hook (10s interval) |
+| `frontend/src/hooks/backgroundProcessingNotifications.js` | Toast & notification logic |
+
+### Database
+
+| File | Purpose |
+|---|---|
+| `docs/schema.sql` | Bootstrap DDL (sequences, tables, pgvector) |
+| `backend/src/main/java/com/aasa/entity/` | 10 JPA entities |
+| `backend/src/main/java/com/aasa/repository/` | 10 Spring Data JPA repos |
+
+---
+
+## Repository Layout
 
 ```
 aiStudyPlanner/
-├── backend/                          # Spring Boot Backend
-│   ├── src/main/java/com/aasa/
-│   │   ├── controller/              # REST Controllers (4 files)
-│   │   │   ├── PdfController.java
-│   │   │   ├── TopicController.java
-│   │   │   ├── QuizController.java
-│   │   │   └── DashboardController.java
-│   │   ├── service/                 # Business Logic (8 files)
-│   │   │   ├── PdfExtractionService.java
-│   │   │   ├── GeminiAiService.java
-│   │   │   ├── TopicAnalysisService.java
-│   │   │   ├── QuizEngineService.java
-│   │   │   ├── StudyProgressService.java
-│   │   │   ├── WeaknessEngineService.java
-│   │   │   ├── ScoringEngineService.java
-│   │   │   └── DashboardService.java
-│   │   ├── entity/                  # JPA Entities (6 files)
-│   │   ├── repository/              # Data Access (6 files)
-│   │   ├── dto/                     # Data Transfer Objects (8 files)
-│   │   └── security/                # JWT Authentication
-│   ├── src/main/resources/
-│   │   └── application.properties   # Configuration
-│   └── pom.xml                      # Maven Dependencies
-│
-├── frontend/                         # React.js Frontend
-│   ├── src/
-│   │   ├── pages/                   # React Pages
-│   │   │   ├── UploadPdf.jsx
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── Study.jsx
-│   │   │   └── ...
-│   │   ├── components/              # Reusable Components
-│   │   ├── context/                 # Auth Context
-│   │   ├── api.js                   # API Configuration
-│   │   └── App.jsx
-│   └── package.json
-
+├── backend/                          # Spring Boot API
+│   └── src/main/java/com/aasa/
+│       ├── controller/              # 13 REST controllers
+│       ├── service/                 # 36 business-logic services
+│       ├── repository/              # 10 Spring Data JPA repos
+│       ├── entity/                  # 10 JPA entities
+│       ├── dto/                     # 37 request/response DTOs
+│       ├── security/                # JWT provider + filter
+│       └── config/                  # Async, CORS, exception handlers
+├── frontend/                         # React + Vite SPA
+│   └── src/
+│       ├── pages/                   # 17 pages
+│       ├── components/              # 7 reusable components
+│       ├── hooks/                   # Custom hooks
+│       ├── context/                 # AuthContext
+│       └── api.js                   # Axios instance + interceptors
+├── ml/                               # ML training & inference
+│   ├── train_model.py               # Random Forest training
+│   ├── serve.py                     # FastAPI inference server
+│   ├── data/                        # Training data (gitignored)
+│   ├── models/                      # Trained model (gitignored)
+│   └── reports/                     # Metrics & confusion matrix
+├── docs/
+│   ├── ARCHITECTURE.md              # Full architecture & algorithms
+│   ├── WORKFLOW.md                  # Step-by-step workflows (A-E)
+│   └── schema.sql                   # Database DDL
+├── docker-compose.yml               # Postgres + ml-service + backend + frontend
+└── .env.example                     # Environment variable template
+```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
-- Java 17+
-- Maven 3.8+
-- Node.js 16+
-- Oracle Database
-- Gemini API Key
+- JDK 17+
+- Maven 3.9+
+- Node 18+
+- Docker (for PostgreSQL + pgvector)
 
-### Setup
-
-**1. Backend**
+### 1. Database
 ```bash
-cd backend
-mvn clean compile
-mvn spring-boot:run
+# Option A: Docker (recommended)
+docker compose up -d postgres
+
+# Option B: Local PostgreSQL with pgvector
+# CREATE EXTENSION IF NOT EXISTS vector;
+# Run docs/schema.sql manually
 ```
 
-**2. Frontend**
+### 2. Backend
+```bash
+cp .env.example backend/.env
+# Edit backend/.env — set GEMINI_API_KEY, JWT_SECRET, DB credentials
+cd backend
+mvn spring-boot:run
+# Runs on http://localhost:9096
+# Health check: curl http://localhost:9096/api/health
+```
+
+### 3. Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
+# Runs on http://localhost:3000
 ```
 
-**3. Access**
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:9090`
-
----
-
-## 🔧 Key Features Implemented
-
-### PDF Processing
-- ✅ File upload with validation
-- ✅ Text extraction with Apache PDFBox
-- ✅ Comprehensive text cleaning
-- ✅ UTF-8 encoding support
-- ✅ Error handling and logging
-
-### AI Integration
-- ✅ Gemini API integration
-- ✅ 60-second timeout handling
-- ✅ JSON request/response handling
-- ✅ Error handling and fallback
-- ✅ API key validation
-
-### Quiz Generation
-- ✅ AI-generated questions from PDF content
-- ✅ Comprehensive question validation
-- ✅ Duplicate detection
-- ✅ Multiple difficulty levels
-- ✅ Answer explanation feedback
-
-### Adaptive Learning
-- ✅ Dynamic weakness tracking
-- ✅ Score-based weakness levels
-- ✅ Automatic priority recalculation
-- ✅ Real-time dashboard updates
-- ✅ Personalized recommendations
-
-### Progress Tracking
-- ✅ Quiz attempt history
-- ✅ Performance metrics
-- ✅ Completion percentage
-- ✅ Best scores
-- ✅ Topic ranking by priority
-
----
-
-## 📊 System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    React.js Frontend                        │
-│              (UploadPdf, Dashboard, Study)                  │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                    HTTP/REST API
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                  Spring Boot Backend                        │
-├─────────────────────────────────────────────────────────────┤
-│  Controllers (4)                                            │
-│  ├─ PdfController                                           │
-│  ├─ TopicController                                         │
-│  ├─ QuizController                                          │
-│  └─ DashboardController                                     │
-├─────────────────────────────────────────────────────────────┤
-│  Services (8)                                               │
-│  ├─ PdfExtractionService (Text cleaning)                   │
-│  ├─ GeminiAiService (API integration)                      │
-│  ├─ TopicAnalysisService (Analysis pipeline)              │
-│  ├─ QuizEngineService (Quiz generation)                   │
-│  ├─ StudyProgressService (Progress tracking)              │
-│  ├─ WeaknessEngineService (Weakness calculation)          │
-│  ├─ ScoringEngineService (Score calculations)             │
-│  └─ DashboardService (Dashboard generation)               │
-├─────────────────────────────────────────────────────────────┤
-│  Repositories (6)                                           │
-│  ├─ UserRepository                                          │
-│  ├─ PdfDocumentRepository                                   │
-│  ├─ TopicRepository                                         │
-│  ├─ QuizRepository                                          │
-│  ├─ QuizAttemptRepository                                   │
-│  └─ StudyProgressRepository                                 │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                    JDBC/JPA
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                  Oracle Database                            │
-│  ├─ users                                                   │
-│  ├─ pdf_documents                                           │
-│  ├─ topics                                                  │
-│  ├─ quizzes                                                 │
-│  ├─ quiz_attempts                                           │
-│  └─ study_progress                                          │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🔄 Complete Workflow
-
-### Step 1: PDF Upload
-```
-User uploads PDF + Exam Date
-    ↓
-PdfController validates file
-    ↓
-PdfExtractionService extracts text
-    ↓
-Text cleaning applied
-    ↓
-PdfDocument saved
-```
-
-### Step 2: Content Analysis
-```
-TopicController triggers analysis
-    ↓
-TopicAnalysisService calls Gemini API
-    ↓
-Gemini returns structured JSON
-    ↓
-Topics created with scores
-    ↓
-Topics saved to database
-```
-
-### Step 3: Quiz Generation
-```
-QuizEngineService validates questions
-    ↓
-Invalid questions filtered
-    ↓
-Valid quizzes created
-    ↓
-Quizzes saved to database
-```
-
-### Step 4: Quiz Attempt
-```
-User answers quiz
-    ↓
-QuizController validates answer
-    ↓
-QuizAttempt saved
-    ↓
-StudyProgress updated
-```
-
-### Step 5: Priority Recalculation
-```
-Weakness level calculated
-    ↓
-Priority score recalculated
-    ↓
-Topics reranked
-    ↓
-Database updated
-```
-
-### Step 6: Dashboard Update
-```
-DashboardController fetches fresh data
-    ↓
-Topics ranked by priority
-    ↓
-Weak topics identified
-    ↓
-Dashboard data returned
-```
-
----
-
-## 🛠️ Configuration
-
-### Backend (application.properties)
-```properties
-# Database
-spring.datasource.url=jdbc:oracle:thin:@//localhost:1521/xepdb1
-spring.datasource.username=aasa_user
-spring.datasource.password=aasa_password
-
-# Gemini API (REQUIRED)
-gemini.api.key=your_actual_gemini_api_key_here
-gemini.model.name=gemini-1.5-flash
-
-# Server
-server.port=9090
-
-# JPA
-spring.jpa.hibernate.ddl-auto=update
-```
-
-### Frontend (api.js)
-```javascript
-const API_BASE_URL = 'http://localhost:9090/api'
-```
-
----
-
-## 📈 Performance Metrics
-
-- **PDF Extraction**: < 5 seconds
-- **Gemini API Call**: < 60 seconds
-- **Quiz Generation**: < 10 seconds
-- **Dashboard Load**: < 2 seconds
-- **Quiz Submission**: < 1 second
-
----
-
-## 🧪 Testing
-
-### Compilation
+### 4. ML Service (Optional)
 ```bash
-mvn clean compile -DskipTests
+cd ml
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+python train_model.py                  # Generates models/weakness_model.joblib
+uvicorn serve:app --port 8000          # Starts inference on :8000
 ```
-✅ **Result**: SUCCESS
 
-### Running
+### 5. Full Stack (Docker)
 ```bash
-mvn spring-boot:run
-```
-✅ **Status**: Ready to test
-
-### Manual Testing
-1. Upload PDF
-2. Verify text extraction
-3. Check Gemini API call
-4. Verify quiz generation
-5. Take quiz and check dashboard
-
----
-
-## 📝 API Endpoints
-
-### PDF Management
-```
-POST   /api/pdfs/upload              - Upload PDF
-GET    /api/pdfs                     - Get user's PDFs
-GET    /api/pdfs/{id}                - Get specific PDF
-DELETE /api/pdfs/{id}                - Delete PDF
-```
-
-### Topics
-```
-POST   /api/topics/analyze/{pdfId}   - Analyze PDF
-GET    /api/topics/pdf/{pdfId}       - Get topics
-GET    /api/topics/ranked            - Get ranked topics
-GET    /api/topics/{id}              - Get topic details
-```
-
-### Quizzes
-```
-GET    /api/quizzes/topic/{id}       - Get quizzes
-GET    /api/quizzes/{id}             - Get quiz
-POST   /api/quizzes/{id}/submit      - Submit answer
-```
-
-### Dashboard
-```
-GET    /api/dashboard                - Get dashboard data
+# Set GEMINI_API_KEY and JWT_SECRET in environment
+docker compose up --build
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:9096
+# ML:       http://localhost:8000
+# Postgres: localhost:5432
 ```
 
 ---
 
-## 🐛 Debugging
+## Key Configuration Files
 
-### Enable Debug Logging
+| File | Purpose |
+|---|---|
+| `.env.example` | Template for all environment variables |
+| `backend/.env` | Backend secrets (DB, JWT, Gemini, ML) |
+| `frontend/.env` | Frontend API URL (`VITE_API_URL`) |
+| `backend/src/main/resources/application.properties` | CORS, upload limits, JWT expiry, logging |
+| `docker-compose.yml` | Service definitions & networking |
+
+### Required Environment Variables
+
+| Key | Description |
+|---|---|
+| `JWT_SECRET` | HS512 signing key (min 32 chars) |
+| `GEMINI_API_KEY` | Google Gemini API key |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL credentials |
+| `ML_WEAKNESS_URL` | ML service URL (default: `http://localhost:8000`) |
+| `VITE_API_URL` | Frontend API base (default: `http://localhost:9096/api`) |
+
+---
+
+## Ports
+
+| Service | Port |
+|---|---|
+| Frontend | 3000 |
+| Backend | 9096 |
+| ML Service | 8000 |
+| PostgreSQL | 5432 |
+
+---
+
+## Testing
+
 ```bash
-mvn spring-boot:run -Ddebug
-```
+# Backend unit tests (76 tests, 14 suites)
+cd backend && mvn test
 
-### Check Logs
-```bash
-tail -f backend/target/logs/*.log
-grep "ERROR" backend/target/logs/*.log
-```
+# Integration tests (opt-in, require running services)
+# RAG retrieval (needs Postgres + pgvector):
+RAG_INTEGRATION_TEST=true mvn test -Dtest=RagRetrievalIntegrationTest
 
-### Monitor Database
-```sql
-SELECT COUNT(*) FROM pdf_documents;
-SELECT COUNT(*) FROM topics;
-SELECT COUNT(*) FROM quizzes;
+# ML weakness client (needs ml-service on :8000):
+ML_INTEGRATION_TEST=true mvn test -Dtest=MlWeaknessClientIntegrationTest
 ```
 
 ---
 
-## ✅ Verification Checklist
+## Documentation
 
-- [x] All files compile without errors
-- [x] All services properly autowired
-- [x] All controllers have error handling
-- [x] All major operations have logging
-- [x] PDF extraction includes text cleaning
-- [x] Gemini API has timeout and error handling
-- [x] Quiz validation is comprehensive
-- [x] Priority recalculation is automatic
-- [x] Weakness tracking is working
-- [x] Dashboard data is fresh
-- [x] Documentation is complete
-- [x] Code quality is production-ready
+| Document | Description |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Complete architecture, algorithms, data model, configuration reference |
+| [`docs/WORKFLOW.md`](docs/WORKFLOW.md) | Step-by-step workflows (A–E) with Mermaid diagrams |
+| [`docs/schema.sql`](docs/schema.sql) | Bootstrap DDL — sequences, tables, pgvector |
 
 ---
 
-## 🚀 Deployment
+## ML Model
 
-### Pre-Deployment Checklist
-- [ ] Set Gemini API key
-- [ ] Update database credentials
-- [ ] Update JWT secret
-- [ ] Configure CORS for production
-- [ ] Enable HTTPS
-- [ ] Set up logging to file
-- [ ] Configure backup strategy
-- [ ] Test with production data
-
-### Deployment Steps
-1. Build backend: `mvn clean package`
-2. Build frontend: `npm run build`
-3. Deploy backend JAR
-4. Deploy frontend build
-5. Configure environment variables
-6. Start services
-7. Monitor logs
----
-
-## 📊 Code Statistics
-
-- **Backend Services**: 8 enhanced
-- **Controllers**: 4 enhanced
-- **Lines of Code Added**: 500+
-- **Logging Statements**: 100+
-- **Error Handling Blocks**: 20+
-- **Validation Checks**: 15+
-- **Documentation Pages**: 5
+| Metric | Value |
+|---|---|
+| Algorithm | Random Forest (scikit-learn) |
+| Training Data | ASSISTments Skill-Builder (283k rows, 4,163 students) |
+| Features | previous_attempts, previous_accuracy, average_response_time, recent_accuracy, opportunity |
+| Validation | Student-wise split |
+| Test F1 | 0.734 |
+| Test ROC-AUC | 0.705 |
+| Serving | FastAPI + uvicorn on port 8000 |
 
 ---
 
-## 🎓 Learning Resources
+## Contact
 
-### System Architecture
-- See IMPLEMENTATION_GUIDE.md for detailed architecture
+**Author:** Ujwol Shrestha 
 
-### API Documentation
-- See IMPLEMENTATION_GUIDE.md for API endpoints
-
-### Workflow Diagrams
-- See IMPLEMENTATION_GUIDE.md for workflow diagrams
-
-### Troubleshooting
-- See QUICK_START.md for troubleshooting guide
-
----
-
-## 📄 License
-
-This project is part of the Adaptive AI Study Planner system.
-
----
-
-## 👥 Contributors
-
-- System Design & Implementation
-- Backend Development
-- Frontend Integration
-- Documentation
-
----
-
-## 🎉 Summary
-
-The Adaptive AI Study Planner is now **fully functional and production-ready** with:
-
-✅ Complete PDF extraction and cleaning
-✅ Robust AI integration with Gemini
-✅ Comprehensive quiz generation
-✅ Dynamic weakness tracking
-✅ Adaptive priority recalculation
-✅ Real-time dashboard updates
-✅ Full end-to-end workflow
-✅ Production-ready code quality
-✅ Comprehensive logging and error handling
-✅ Complete documentation
-
-**Status**: READY FOR DEPLOYMENT ✅
-**Date**: 2026-05-23
-**Version**: 1.0.0
+**Project Link:** https://github.com/itsujwal11/aiStudyPlanner

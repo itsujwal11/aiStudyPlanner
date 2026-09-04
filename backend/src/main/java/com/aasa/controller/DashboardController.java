@@ -14,7 +14,6 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/dashboard")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class DashboardController {
 
     private static final Logger logger = Logger.getLogger(DashboardController.class.getName());

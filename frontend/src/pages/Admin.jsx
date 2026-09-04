@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { adminAPI, authAPI } from '../api'
+import { adminAPI } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { Database, ChevronRight, Trash2, ArrowLeft, Table2, Shield, RefreshCw } from 'lucide-react'
+import { Database, ChevronRight, Trash2, ArrowLeft, Table2, RefreshCw } from 'lucide-react'
 
 const TYPE_COLORS = {
   String: 'text-emerald-600 bg-emerald-50',
@@ -25,7 +25,9 @@ function formatValue(val, colName, colType) {
   if (isDateLike(colName, colType) && typeof val === 'string') {
     try {
       return { text: new Date(val).toLocaleString(), classes: 'text-cyan-700 text-xs' }
-    } catch { }
+    } catch {
+      // Fall through to the raw value when a date cannot be formatted.
+    }
   }
   let text = String(val)
   if (text.length > 60) text = text.substring(0, 60) + '...'
@@ -90,16 +92,6 @@ export const Admin = () => {
     setRecords(null)
     setError('')
     fetchEntities()
-  }
-
-  const seedAdmin = async () => {
-    try {
-      await authAPI.seedAdmin()
-      toast.success('Admin seeded')
-      fetchEntities()
-    } catch (err) {
-      toast.error(err.response?.data || 'Seed failed')
-    }
   }
 
   if (authLoading) return null
@@ -218,9 +210,6 @@ export const Admin = () => {
         <div className="flex items-center gap-2">
           <button onClick={fetchEntities} disabled={loading} className="btn-glass-secondary text-sm p-2.5 disabled:opacity-50" title="Refresh">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button onClick={seedAdmin} className="btn-glass-secondary text-sm flex items-center gap-2">
-            <Shield className="w-4 h-4" /> Seed Admin
           </button>
         </div>
       </div>

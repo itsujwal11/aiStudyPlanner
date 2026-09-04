@@ -9,7 +9,6 @@
     "lint": "eslint . --ext .js,.jsx"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.106.2",
     "axios": "^1.6.2",
     "canvas-confetti": "^1.9.4",
     "framer-motion": "^12.40.0",

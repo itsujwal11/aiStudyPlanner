@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg17
     container_name: aasa-postgres
     environment:
       POSTGRES_DB: aasa_db
@@ -21,24 +21,46 @@ services:
       timeout: 5s
       retries: 5
 
+  ml-service:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    container_name: aasa-ml
+    ports:
+      - "8000:8000"
+    networks:
+      - aasa-network
+    volumes:
+      # The 30 MB joblib is gitignored, so it is mounted rather than baked into
+      # the image. Generate it with `cd ml && python train_model.py`; the
+      # service reports modelLoaded:false until it exists, and the backend
+      # falls back to evidence-only weakness scoring.
+      - ./ml/models:/app/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      platform: linux/amd64
     container_name: aasa-backend
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aasa_db
       SPRING_DATASOURCE_USERNAME: aasa_user
       SPRING_DATASOURCE_PASSWORD: aasa_password
-      GEMINI_API_KEY: AIzaSyBFupP_QViHyFFvuOUolb04oZTkbBedXYU
-      GEMINI_MODEL_NAME: gemini-1.5-flash
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in your environment or root .env file}
       JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
+      ML_WEAKNESS_URL: http://ml-service:8000
     ports:
-      - "8080:8080"
+      - "9096:9096"
     depends_on:
       postgres:
         condition: service_healthy
+      ml-service:
+        condition: service_started
     networks:
       - aasa-network
     volumes:
@@ -50,7 +72,7 @@ services:
       dockerfile: Dockerfile
     container_name: aasa-frontend
     environment:
-      VITE_API_URL: http://localhost:8080/api
+      VITE_API_URL: http://localhost:9096/api
     ports:
       - "3000:3000"
     depends_on:
