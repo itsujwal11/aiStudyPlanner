@@ -316,13 +316,18 @@ useEffect(() => {
               >
                 <h3 className="font-semibold text-on-surface truncate">{pdf.fileName}</h3>
                 <p className="text-xs text-on-surface-variant/60 mt-1">Exam: {new Date(pdf.examDate).toLocaleDateString()}</p>
-                <p className={`text-xs font-medium mt-2 ${pdf.processingStatus === 'FAILED' ? 'text-red-600' : 'text-primary'}`} title={pdf.processingError || ''}>
+                <p className={`text-xs font-medium mt-2 ${pdf.processingStatus === 'FAILED' ? 'text-red-600' : 'text-primary'}`}>
                   {pdf.topicCount} topics &bull; {pdf.processingStatus === 'FAILED'
                     ? 'Processing failed'
                     : pdf.isAnalyzed || pdf.processingStatus === 'COMPLETED'
                       ? 'Analyzed'
                       : 'Processing...'}
                 </p>
+                {pdf.processingStatus === 'FAILED' && pdf.processingError && (
+                  <p className="text-xs text-red-600/80 mt-1 leading-5 break-words">
+                    {pdf.processingError}
+                  </p>
+                )}
               </motion.div>
             ))}
             {pdfs.length === 0 && (

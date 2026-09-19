@@ -55,8 +55,24 @@ public class PdfProcessingService {
         }
     }
 
+    /**
+     * The message stored as the PDF's processingError and shown to the student on
+     * the dashboard, so a classified AI failure contributes its student-facing
+     * wording rather than its raw upstream text.
+     */
     private String rootMessage(Throwable throwable) {
         Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof AiServiceException aiFailure) {
+                return aiFailure.getUserMessage();
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+            current = current.getCause();
+        }
+
+        current = throwable;
         while (current.getCause() != null && current.getCause() != current) {
             current = current.getCause();
         }

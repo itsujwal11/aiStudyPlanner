@@ -65,10 +65,10 @@ public class PdfController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "Invalid file type. Please upload a PDF"));
         }
 
-        long maxSize = 50L * 1024 * 1024;
+        long maxSize = 100L * 1024 * 1024;
         if (file.getSize() > maxSize) {
             logger.warning("File exceeds size limit: " + file.getSize());
-            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(Map.of("error", "File size exceeds 50MB limit"));
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(Map.of("error", "File size exceeds 100MB limit"));
         }
 
         User user = authService.getUserByEmail(authentication.getName());

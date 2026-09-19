@@ -11,19 +11,37 @@ export const UploadPdf = () => {
   const [examDate, setExamDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [warning, setWarning] = useState('')
   const [success, setSuccess] = useState('')
   const [progress, setProgress] = useState({ stage: '', percentage: 0 })
   const navigate = useNavigate()
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0]
-    if (selectedFile && selectedFile.type === 'application/pdf') {
-      setFile(selectedFile)
-      setError('')
-    } else {
+    if (!selectedFile) return
+
+    if (selectedFile.type !== 'application/pdf') {
       setError('Please select a valid PDF file')
+      setWarning('')
       setFile(null)
+      return
     }
+    
+    if (selectedFile.size > 100 * 1024 * 1024) {
+      setError('Please upload a PDF file smaller than 100MB')
+      setWarning('')
+      setFile(null)
+      return
+    }
+
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setWarning('Recommendation: This PDF is very large. On a free AI tier, it will likely fail to process due to strict token limits. We highly recommend uploading a smaller file (under 5MB) for testing.')
+    } else {
+      setWarning('')
+    }
+
+    setFile(selectedFile)
+    setError('')
   }
 
   const handleSubmit = async (e) => {
@@ -42,6 +60,7 @@ export const UploadPdf = () => {
       setProgress({ stage: 'Upload complete. AI processing continues in the background.', percentage: 100 })
       setFile(null)
       setExamDate('')
+      setWarning('')
       setSuccess('PDF uploaded. AI analysis runs in the background - you will receive a notification here as soon as your topics and quizzes are ready.')
       toast.success('Uploaded! We will notify you when analysis finishes.')
 
@@ -53,7 +72,7 @@ export const UploadPdf = () => {
         navigate('/dashboard')
       }, 1200)
     } catch (err) {
-      const errorMsg = err.response?.data || err.response?.data?.message || err.message || 'Upload failed'
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Upload failed'
       setError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg))
       toast.error('Upload failed')
       setProgress({ stage: '', percentage: 0 })
@@ -85,6 +104,13 @@ export const UploadPdf = () => {
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 mb-6 flex items-center gap-3">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
               <p className="text-sm">{error}</p>
+            </motion.div>
+          )}
+
+          {warning && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="glass-pane rounded-xl p-4 border border-black/8 bg-amber-50/80 border border-amber-200/50 text-amber-700 mb-6 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">{warning}</p>
             </motion.div>
           )}
 
@@ -123,7 +149,7 @@ export const UploadPdf = () => {
                     <p className="text-sm font-medium text-on-surface">
                       {file ? file.name : 'Click to upload or drag and drop'}
                     </p>
-                    <p className="text-xs text-on-surface-variant/70 mt-1">PDF files only</p>
+                    <p className="text-xs text-on-surface-variant/70 mt-1">PDF files only (Max 100MB)</p>
                   </div>
                   <input type="file" accept=".pdf" onChange={handleFileChange} className="hidden" disabled={loading} />
                 </label>

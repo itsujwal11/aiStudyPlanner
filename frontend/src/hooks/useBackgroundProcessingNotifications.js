@@ -24,12 +24,19 @@ import { useAuth } from '../context/AuthContext'
  */
 
 const POLL_INTERVAL_MS = 10000 // 10 seconds - less aggressive, server-friendly
+// How long after an upload the watcher keeps polling even if nothing looks
+// active yet, covering the gap before the new PDF appears in /pdfs.
+const UPLOAD_GRACE_MS = 60000
 
 export const useBackgroundProcessingNotifications = () => {
   const { token } = useAuth()
   const statusMapRef = useRef(new Map()) // pdfId -> { status }
   const seededRef = useRef(false)
   const intervalIdRef = useRef(null)
+  // Keeps polling alive briefly after an upload, for the window where the new
+  // PDF has not shown up in /pdfs yet. Without it, one poll that sees nothing
+  // active stops the watcher for good and the "ready" toast never arrives.
+  const uploadGraceUntilRef = useRef(0)
 
   useEffect(() => {
     if (!token) return undefined
@@ -48,16 +55,17 @@ export const useBackgroundProcessingNotifications = () => {
       const hasActive = Array.from(statusMapRef.current.values()).some(
         s => s.status === 'PROCESSING' || s.status === 'PENDING'
       )
+      const awaitingUpload = Date.now() < uploadGraceUntilRef.current
 
       // Clear existing interval if no active processing and we've seeded
-      if (!hasActive && seededRef.current && intervalIdRef.current) {
+      if (!hasActive && !awaitingUpload && seededRef.current && intervalIdRef.current) {
         clearInterval(intervalIdRef.current)
         intervalIdRef.current = null
         return
       }
 
       // Start interval if there's active processing OR we haven't seeded yet
-      if (!intervalIdRef.current && (hasActive || !seededRef.current)) {
+      if (!intervalIdRef.current && (hasActive || awaitingUpload || !seededRef.current)) {
         intervalIdRef.current = setInterval(poll, POLL_INTERVAL_MS)
       }
     }
@@ -120,6 +128,7 @@ export const useBackgroundProcessingNotifications = () => {
     // Listen for new uploads to restart polling
     const onPdfUpload = () => {
       seededRef.current = false // reset seed so we re-check all PDFs
+      uploadGraceUntilRef.current = Date.now() + UPLOAD_GRACE_MS
       poll()
       checkAndSchedulePoll()
     }
@@ -130,7 +139,16 @@ export const useBackgroundProcessingNotifications = () => {
     checkAndSchedulePoll() // schedule based on initial state
 
     return () => {
-      if (intervalIdRef.current) clearInterval(intervalIdRef.current)
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current)
+        // Must be nulled, not just cleared. The ref outlives the effect, so a
+        // stale id left here reads as "already polling" on the next mount and
+        // checkAndSchedulePoll refuses to start a new interval — under
+        // React.StrictMode, which remounts every effect once in development,
+        // that killed the watcher on the very first mount and no completion
+        // toast could ever fire.
+        intervalIdRef.current = null
+      }
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pdf-upload-complete', onPdfUpload)
     }
