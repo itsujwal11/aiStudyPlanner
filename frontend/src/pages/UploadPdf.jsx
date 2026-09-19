@@ -100,6 +100,13 @@ export const UploadPdf = () => {
             </p>
           </div>
 
+          <div className="glass-pane rounded-xl p-4 bg-blue-50/80 border border-blue-200/50 text-blue-800 mb-6 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div className="text-sm leading-relaxed">
+              <strong>API Limit Recommendation:</strong> Since this app uses a free-tier AI API, please upload a small PDF (e.g. 2-5 pages) for testing. Large textbooks (50MB+) may hit token limits and fail to process.
+            </div>
+          </div>
+
           {error && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="glass-pane rounded-xl p-4 border border-black/8 bg-red-50/80 border border-red-200/50 text-red-700 mb-6 flex items-center gap-3">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
