@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,7 +46,7 @@ public class RagAugmentedService {
     private static final int MAX_ATTEMPTS = 3;
     private static final int EMBEDDING_DIMENSION = 768;
     private static final String[][] GENERATION_ENDPOINTS = {
-            {"v1beta", "gemini-3.5-flash"},
+            {"v1beta", "gemini-3.6-flash"},
             {"v1", "gemini-2.5-flash"}
     };
 
@@ -410,13 +411,28 @@ public class RagAugmentedService {
                "Provide a clear, educational answer following all rules above.";
     }
 
+    /**
+     * Tries each model in the fallback chain and, if they all fail, rethrows the
+     * most informative failure rather than flattening every cause into one
+     * generic sentence. A quota that has run out and a missing API key need
+     * different actions from whoever is reading the screen, so the reason has to
+     * survive the fallback loop.
+     */
     private String callGeminiWithContext(String prompt) {
         List<String> errors = new ArrayList<>();
+        AiServiceException firstClassified = null;
+
         for (String[] endpoint : GENERATION_ENDPOINTS) {
             String apiVersion = endpoint[0];
             String model = endpoint[1];
             try {
                 return callGeminiModel(prompt, apiVersion, model);
+            } catch (AiServiceException e) {
+                logger.warning("RAG generation with " + model + " failed: " + e.getMessage());
+                errors.add(model + ": " + e.getMessage());
+                if (firstClassified == null) {
+                    firstClassified = e;
+                }
             } catch (Exception e) {
                 logger.warning("RAG generation with " + model + " failed: " + e.getMessage());
                 errors.add(model + ": " + e.getMessage());
@@ -424,13 +440,24 @@ public class RagAugmentedService {
         }
 
         logger.severe("All RAG generation models failed: " + String.join(" | ", errors));
-        return "I'm sorry, the AI answer service is temporarily unavailable. Please try again later.";
+
+        if (firstClassified != null) {
+            throw firstClassified;
+        }
+        throw new AiServiceException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "The AI answer service could not be reached. Please check your internet "
+                        + "connection and try again.",
+                "All RAG generation models failed: " + String.join(" | ", errors));
     }
 
     private String callGeminiModel(String prompt, String apiVersion, String model)
             throws Exception {
         if (apiKey == null || apiKey.isBlank() || apiKey.contains("YOUR_")) {
-            throw new IllegalStateException("Gemini API key is not configured");
+            throw new AiServiceException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "The AI service is not configured on this server: no Gemini API key is set.",
+                    "Gemini API key is not configured");
         }
 
         String url = "https://generativelanguage.googleapis.com/" + apiVersion
@@ -479,9 +506,11 @@ public class RagAugmentedService {
                     continue;
                 }
 
-                throw new IllegalStateException(
-                        "HTTP " + status + ": " + parseGeminiError(response.body())
+                throw AiServiceException.fromGeminiStatus(
+                        status, parseGeminiError(response.body())
                 );
+            } catch (AiServiceException e) {
+                throw e;
             } catch (java.io.IOException e) {
                 lastError = e;
                 if (attempt >= MAX_ATTEMPTS) {
@@ -494,10 +523,12 @@ public class RagAugmentedService {
             }
         }
 
-        throw new IllegalStateException(
-                "Gemini request failed after " + MAX_ATTEMPTS + " attempts",
-                lastError
-        );
+        throw new AiServiceException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Could not reach the AI service after " + MAX_ATTEMPTS + " attempts. "
+                        + "Please check your internet connection and try again.",
+                "Gemini request failed after " + MAX_ATTEMPTS + " attempts"
+                        + (lastError != null ? ": " + lastError.getMessage() : ""));
     }
 
     private String parseGeminiError(String responseBody) {
@@ -519,12 +550,16 @@ public class RagAugmentedService {
             return "I couldn't generate an answer. The model returned no response.";
         }
 
-        return candidates.get(0)
-                .path("content")
-                .path("parts")
-                .get(0)
-                .path("text")
-                .asText("No answer generated.");
+        JsonNode parts = candidates.get(0).path("content").path("parts");
+        StringBuilder answerBuilder = new StringBuilder();
+        for (JsonNode part : parts) {
+            if (part.has("text")) {
+                answerBuilder.append(part.path("text").asText());
+            }
+        }
+
+        String finalAnswer = answerBuilder.toString();
+        return finalAnswer.isEmpty() ? "No answer generated." : finalAnswer;
     }
 
     /**

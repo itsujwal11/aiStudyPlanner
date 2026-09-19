@@ -2,14 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { ragAPI, pdfAPI } from '../api'
 import { motion } from 'framer-motion'
 import { AlertCircle, BookOpen, FileText, Loader2, Send } from 'lucide-react'
-
-const formatInline = (text) => (
-  text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-    part.startsWith('**') && part.endsWith('**')
-      ? <strong key={index} className="font-semibold">{part.slice(2, -2)}</strong>
-      : <React.Fragment key={index}>{part}</React.Fragment>
-  )
-)
+import ReactMarkdown from 'react-markdown'
 
 /**
  * AI Chat — the demonstrable RAG pipeline UI:
@@ -107,8 +100,21 @@ export const AiChat = () => {
           <div className="flex items-center gap-2 mb-4 text-emerald-700 font-semibold">
             <BookOpen className="w-5 h-5" /> Answer
           </div>
-          <div className="pt-4 border-t border-black/8 text-sm md:text-base leading-7 text-on-surface space-y-2">
-            {result.answer.split(/\r?\n/).map((line, i) => <p key={i}>{formatInline(line)}</p>)}
+          <div className="pt-4 border-t border-black/8 text-sm md:text-base leading-7 text-on-surface">
+            <ReactMarkdown
+              components={{
+                h1: ({ node: _node, ...props }) => <h1 className="text-xl font-bold mt-4 mb-2 text-on-surface" {...props} />,
+                h2: ({ node: _node, ...props }) => <h2 className="text-lg font-bold mt-4 mb-2 text-on-surface" {...props} />,
+                h3: ({ node: _node, ...props }) => <h3 className="text-md font-bold mt-3 mb-2 text-on-surface" {...props} />,
+                p: ({ node: _node, ...props }) => <p className="mb-2" {...props} />,
+                ul: ({ node: _node, ...props }) => <ul className="list-disc pl-5 mb-2 space-y-1" {...props} />,
+                ol: ({ node: _node, ...props }) => <ol className="list-decimal pl-5 mb-2 space-y-1" {...props} />,
+                li: ({ node: _node, ...props }) => <li {...props} />,
+                strong: ({ node: _node, ...props }) => <strong className="font-semibold" {...props} />,
+              }}
+            >
+              {result.answer}
+            </ReactMarkdown>
           </div>
         </motion.div>
       )}

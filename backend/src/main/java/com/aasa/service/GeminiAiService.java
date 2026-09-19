@@ -88,7 +88,34 @@ public class GeminiAiService {
             }
         }
 
+        // Classify before giving up, so the reason reaches the student: this
+        // message is stored as the PDF's processingError and shown on the
+        // dashboard. "All Gemini models failed: HTTP 429..." is not something a
+        // student can act on; "the free tier's limit was reached" is.
+        AiServiceException classified = classifyFailures(errors);
+        if (classified != null) {
+            throw classified;
+        }
         throw new IllegalStateException("All Gemini models failed: " + String.join(" | ", errors));
+    }
+
+    /**
+     * Recovers the upstream status from the collected failure strings, which are
+     * built as {@code "<model> (API <v>) failed: HTTP <status>: <detail>"}.
+     *
+     * @return the classified failure, or {@code null} when no HTTP status was
+     *         involved (a network or parsing fault), which the caller reports as-is
+     */
+    private AiServiceException classifyFailures(List<String> errors) {
+        for (String error : errors) {
+            java.util.regex.Matcher matcher =
+                    java.util.regex.Pattern.compile("HTTP (\\d{3}):\\s*(.*)").matcher(error);
+            if (matcher.find()) {
+                int status = Integer.parseInt(matcher.group(1));
+                return AiServiceException.fromGeminiStatus(status, matcher.group(2));
+            }
+        }
+        return null;
     }
 
     private String callGeminiApi(String prompt, String baseUrl) throws Exception {

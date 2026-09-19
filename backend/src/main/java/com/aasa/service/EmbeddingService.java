@@ -51,6 +51,11 @@ public class EmbeddingService {
         try {
             List<float[]> embeddings = requestBatch(List.of(formatQuery(text)));
             return embeddings.size() == 1 ? embeddings.get(0) : null;
+        } catch (AiServiceException e) {
+            // Let a quota or auth failure reach the student instead of degrading
+            // into an unexplained "search unavailable".
+            logger.warning("Query embedding failed: " + e.getMessage());
+            throw e;
         } catch (Exception e) {
             logger.warning("Query embedding failed: " + e.getMessage());
             return null;
@@ -166,9 +171,10 @@ public class EmbeddingService {
                     continue;
                 }
 
-                throw new IllegalStateException(
-                        "Embedding API returned HTTP " + status + ": " + apiMessage
-                );
+                // Embeddings share the project's Gemini quota, so a rate limit is
+                // hit here before generation is ever reached. Classify it so the
+                // reason survives instead of becoming a null return.
+                throw AiServiceException.fromGeminiStatus(status, apiMessage);
             } catch (IOException e) {
                 lastError = e;
                 if (attempt >= MAX_ATTEMPTS) {
